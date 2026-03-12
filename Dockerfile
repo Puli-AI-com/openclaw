@@ -63,6 +63,41 @@ COPY patches ./patches
 
 COPY --from=ext-deps /out/ ./extensions/
 
+# Install uv globally for Linux containers and ensure uvx is available.
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+ && if [ ! -e /usr/local/bin/uvx ]; then ln -sf /usr/local/bin/uv /usr/local/bin/uvx; fi
+
+ARG OPENCLAW_DOCKER_APT_PACKAGES=""
+RUN if [ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]; then \
+      apt-get update && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $OPENCLAW_DOCKER_APT_PACKAGES && \
+      apt-get clean && \
+      rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
+    fi
+
+# Optional: install a specific Go version from go.dev (for skills requiring newer Go than apt provides).
+# Example: --build-arg OPENCLAW_DOCKER_GO_VERSION=1.24.2
+ARG OPENCLAW_DOCKER_GO_VERSION=""
+RUN if [ -n "$OPENCLAW_DOCKER_GO_VERSION" ]; then \
+      arch="$(dpkg --print-architecture)"; \
+      case "$arch" in \
+        amd64) go_arch="amd64" ;; \
+        arm64) go_arch="arm64" ;; \
+        *) echo "Unsupported architecture for Go install: $arch" >&2; exit 1 ;; \
+      esac; \
+      curl -fsSL "https://go.dev/dl/go${OPENCLAW_DOCKER_GO_VERSION}.linux-${go_arch}.tar.gz" -o /tmp/go.tgz && \
+      rm -rf /usr/local/go && \
+      tar -C /usr/local -xzf /tmp/go.tgz && \
+      rm -f /tmp/go.tgz && \
+      ln -sf /usr/local/go/bin/go /usr/local/bin/go && \
+      ln -sf /usr/local/go/bin/gofmt /usr/local/bin/gofmt; \
+    fi
+
+COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY --chown=node:node ui/package.json ./ui/package.json
+COPY --chown=node:node patches ./patches
+COPY --chown=node:node scripts ./scripts
+
 # Reduce OOM risk on low-memory hosts during dependency installation.
 # Docker builds on small VMs may otherwise fail with "Killed" (exit 137).
 RUN --mount=type=cache,id=openclaw-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \

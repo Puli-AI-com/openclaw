@@ -61,6 +61,7 @@ Optional env vars:
 - `OPENCLAW_IMAGE` — use a remote image instead of building locally (e.g. `ghcr.io/openclaw/openclaw:latest`)
 - `OPENCLAW_DOCKER_APT_PACKAGES` — install extra apt packages during build
 - `OPENCLAW_EXTENSIONS` — pre-install extension dependencies at build time (space-separated extension names, e.g. `diagnostics-otel matrix`)
+- `OPENCLAW_DOCKER_GO_VERSION` — install a specific Go version from `go.dev` (for example `1.24.2`)
 - `OPENCLAW_EXTRA_MOUNTS` — add extra host bind mounts
 - `OPENCLAW_HOME_VOLUME` — persist `/home/node` in a named volume
 - `OPENCLAW_SANDBOX` — opt in to Docker gateway sandbox bootstrap. Only explicit truthy values enable it: `1`, `true`, `yes`, `on`
@@ -346,6 +347,27 @@ Notes:
 - Only extensions with a `package.json` are affected; lightweight plugins without one are ignored.
 - If you change `OPENCLAW_EXTENSIONS`, rerun `docker-setup.sh` to rebuild
   the image.
+
+### Pin a newer Go version (optional)
+
+Debian apt packages can lag behind current Go releases. If a skill requires a
+newer Go toolchain than `golang-go` provides, set `OPENCLAW_DOCKER_GO_VERSION`
+to install Go directly from `go.dev` during image build.
+
+Example:
+
+```bash
+export OPENCLAW_DOCKER_APT_PACKAGES="git curl jq ffmpeg"
+export OPENCLAW_DOCKER_GO_VERSION="1.24.2"
+./docker-setup.sh
+```
+
+Notes:
+
+- This installs Go under `/usr/local/go` and links `go`/`gofmt` into `/usr/local/bin`.
+- If you set both `OPENCLAW_DOCKER_APT_PACKAGES="golang-go ..."` and
+  `OPENCLAW_DOCKER_GO_VERSION`, the pinned Go version wins because it is
+  installed later in the Dockerfile.
 
 ### Power-user / full-featured container (opt-in)
 
