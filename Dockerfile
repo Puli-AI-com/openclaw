@@ -261,6 +261,31 @@ RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
 
 ENV NODE_ENV=production
 
+# Bake structural defaults into the image.
+# Secrets and dynamic values (API keys, endpoints) are injected at runtime via
+# environment variables using ${VAR_NAME} substitution in the config.
+# /app/default-config/openclaw.json is used as a seed: the entrypoint copies it to
+# ~/.openclaw/openclaw.json on first start when the EFS mount is empty.
+# ~/.openclaw/openclaw.json also exists for non-EFS (local/docker-compose) runs.
+COPY default-config/openclaw.json /app/default-config/openclaw.json
+RUN mkdir -p /home/node/.openclaw && \
+    cp /app/default-config/openclaw.json /home/node/.openclaw/openclaw.json && \
+    chown -R node:node /home/node/.openclaw
+
+# Clone the shared envoy tools repo (skills live under skills/ within it).
+# Token is passed as a build secret — never stored in any image layer.
+RUN --mount=type=secret,id=github_token \
+    git clone https://$(cat /run/secrets/github_token)@github.com/Puli-AI-com/Puli-envoy-tools.git /app/envoy-tools \
+    && chown -R node:node /app/envoy-tools
+
+# Copy the BE Python client + CLI into the crowdtest skill directory so the
+# skill can shell out to them without needing a separate container.
+# Source is injected via the `be_app` additional build context (see docker-compose).
+COPY --from=be_app SKILL.md /app/envoy-tools/skills/db_client/SKILL.md
+COPY --from=be_app clients/ /app/envoy-tools/skills/db_client/scripts/
+COPY --from=be_app cli/ /app/envoy-tools/skills/db_client/scripts/
+RUN chown -R node:node /app/envoy-tools/skills/db_client
+
 # Security hardening: Run as non-root user
 # The node:24-bookworm image includes a 'node' user (uid 1000)
 # This reduces the attack surface by preventing container escape via root privileges

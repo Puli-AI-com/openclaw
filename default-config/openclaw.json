@@ -1,0 +1,51 @@
+{
+  "gateway": {
+    "controlUi": {
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "groupPolicy": "open"
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "litellm": {
+        "baseUrl": "http://proxy.litellm.internal:4000/v1",
+        "apiKey": "${LITELLM_MASTER_KEY}",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "claude-sonnet-4-6",
+            "name": "Claude Sonnet 4.6 (EU Bedrock)",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 200000,
+            "maxTokens": 64000
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "litellm/claude-sonnet-4-6"
+      }
+    }
+  },
+  "skills": {
+    "load": {
+      "extraDirs": ["/app/envoy-tools/skills"]
+    }
+  }
+}

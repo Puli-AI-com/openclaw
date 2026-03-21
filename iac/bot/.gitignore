@@ -1,6 +1,0 @@
-# tfvars files contain secrets — never commit real values
-envoys/*.tfvars
-
-# Workspace state files contain sensitive data in plaintext
-terraform.tfstate.d/
-.terraform/
