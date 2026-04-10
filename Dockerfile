@@ -278,6 +278,12 @@ RUN --mount=type=secret,id=github_token \
     git clone https://$(cat /run/secrets/github_token)@github.com/Puli-AI-com/Puli-envoy-tools.git /app/envoy-tools \
     && chown -R node:node /app/envoy-tools
 
+# Bot profile workspace files — seeded into the openclaw workspace at startup
+# by entrypoint.sh based on the BOT_PROFILE env var.
+COPY --chown=node:node profiles /app/profiles
+COPY --chown=node:node entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Copy the BE Python client + CLI into the crowdtest skill directory so the
 # skill can shell out to them without needing a separate container.
 # Source is injected via the `be_app` additional build context (see docker-compose).
@@ -285,6 +291,14 @@ COPY --from=be_app SKILL.md /app/envoy-tools/skills/db_client/SKILL.md
 COPY --from=be_app clients/ /app/envoy-tools/skills/db_client/scripts/
 COPY --from=be_app cli/ /app/envoy-tools/skills/db_client/scripts/
 RUN chown -R node:node /app/envoy-tools/skills/db_client
+
+# Copy monitoring run skills (one per device type)
+COPY --from=be_app app/monitoring_run_android.md /app/envoy-tools/skills/monitoring_run_android/SKILL.md
+COPY --from=be_app app/monitoring_run_ios.md     /app/envoy-tools/skills/monitoring_run_ios/SKILL.md
+COPY --from=be_app app/monitoring_run_browser.md /app/envoy-tools/skills/monitoring_run_browser/SKILL.md
+RUN chown -R node:node /app/envoy-tools/skills/monitoring_run_android \
+                       /app/envoy-tools/skills/monitoring_run_ios \
+                       /app/envoy-tools/skills/monitoring_run_browser
 
 # Security hardening: Run as non-root user
 # The node:24-bookworm image includes a 'node' user (uid 1000)
@@ -305,4 +319,5 @@ USER node
 # For external access from host/ingress, override bind to "lan" and set auth.
 HEALTHCHECK --interval=3m --timeout=10s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured"]
