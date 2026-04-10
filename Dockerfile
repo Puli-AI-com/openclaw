@@ -292,14 +292,6 @@ COPY --from=be_app clients/ /app/envoy-tools/skills/db_client/scripts/
 COPY --from=be_app cli/ /app/envoy-tools/skills/db_client/scripts/
 RUN chown -R node:node /app/envoy-tools/skills/db_client
 
-# Copy monitoring run skills (one per device type)
-COPY --from=be_app app/monitoring_run_android.md /app/envoy-tools/skills/monitoring_run_android/SKILL.md
-COPY --from=be_app app/monitoring_run_ios.md     /app/envoy-tools/skills/monitoring_run_ios/SKILL.md
-COPY --from=be_app app/monitoring_run_browser.md /app/envoy-tools/skills/monitoring_run_browser/SKILL.md
-RUN chown -R node:node /app/envoy-tools/skills/monitoring_run_android \
-                       /app/envoy-tools/skills/monitoring_run_ios \
-                       /app/envoy-tools/skills/monitoring_run_browser
-
 # Security hardening: Run as non-root user
 # The node:24-bookworm image includes a 'node' user (uid 1000)
 # This reduces the attack surface by preventing container escape via root privileges
