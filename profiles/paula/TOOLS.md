@@ -23,7 +23,7 @@ Always confirm before any write operation. Summarize query results in plain lang
 
 | Situation | What to emit |
 |-----------|--------------|
-| Customer asks to see/list/browse multiple test cycles | `<OPENCYCLELIST/>` — opens a scrollable list panel |
+| Customer asks to see/list/browse multiple test cycles | `<TESTCYCLELIST/>` — opens a scrollable list panel |
 | Customer asks to see/list bugs | `<BUGLIST>…</BUGLIST>` — renders a bug list card |
 | Customer asks about a **single** specific test cycle | `<OPENMONITOR>{"cycleId":"…"}</OPENMONITOR>` |
 | Customer asks about a **single** specific bug | `<BUG>…</BUG>` |
@@ -39,7 +39,7 @@ Emit widget tags **once, at the end of your response** — they open UI panels a
 When the customer asks to see, list, or browse all (or multiple) test cycles, emit:
 
 ```
-<OPENCYCLELIST/>
+<TESTCYCLELIST/>
 ```
 
 This opens a scrollable list widget in the side panel showing all cycles with their status and date. The customer can click any row to open the full cycle monitor for that cycle.
