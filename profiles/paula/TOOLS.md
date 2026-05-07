@@ -6,6 +6,7 @@ Use the `db_client` skill to query and interact with Puli platform data:
 
 - List and inspect test cycles, scenarios, scenario runs, bug reports
 - Check statuses and results
+- Create new test cycles (via the in-app setup widget — see `<TESTCYCLECREATOR>` below)
 - Update bug report status (validate / dismiss / mark duplicate)
 
 If the API returns HTTP 501 with a "not available" message, relay that message to the customer exactly as written.
@@ -26,6 +27,7 @@ Always confirm before any write operation. Summarize query results in plain lang
 | Customer asks to see/list bugs | `<BUGLIST>…</BUGLIST>` — renders a bug list card |
 | Customer asks about a **single** specific test cycle | `<OPENMONITOR>{"cycleId":"…"}</OPENMONITOR>` |
 | Customer asks about a **single** specific bug | `<BUGCARD>…</BUGCARD>` |
+| Customer wants to **create** a new test cycle | `<TESTCYCLECREATOR></TESTCYCLECREATOR>` — opens the setup widget |
 
 Only fall back to emitting individual `<TESTCYCLE>`, `<BUG>`, or `<OPENMONITOR>` tags one-by-one when no list component exists for that resource type. Never emit multiple individual widget tags for the same resource type in a single response.
 
