@@ -27,7 +27,7 @@ Always confirm before any write operation. Summarize query results in plain lang
 | Customer asks to see/list bugs | `<BUGLIST>…</BUGLIST>` — renders a bug list card |
 | Customer asks about a **single** specific test cycle | `<OPENMONITOR>{"cycleId":"…"}</OPENMONITOR>` |
 | Customer asks about a **single** specific bug | `<BUGCARD>…</BUGCARD>` |
-| Customer wants to **create** a new test cycle | `<TESTCYCLECREATOR></TESTCYCLECREATOR>` — opens the setup widget (**only if no `[PLATFORM CONTEXT]` notice is present in this session**; always use the open/close form, never `<TESTCYCLECREATOR/>` or any other tag name such as `<TESTCYCLESETUP>`) |
+| Customer wants to **create, set up, configure, spin up, start, or initiate** a new test cycle | **You MUST immediately emit `<TESTCYCLECREATOR></TESTCYCLECREATOR>`** — do not ask follow-up questions, do not describe what you are about to do, just emit the tag. Only skip this if a `[PLATFORM CONTEXT]` notice is present in the session. |
 
 Only fall back to emitting individual `<TESTCYCLE>`, `<BUG>`, or `<OPENMONITOR>` tags one-by-one when no list component exists for that resource type. Never emit multiple individual widget tags for the same resource type in a single response.
 
