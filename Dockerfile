@@ -272,8 +272,16 @@ RUN mkdir -p /home/node/.openclaw && \
     cp /app/default-config/openclaw.json /home/node/.openclaw/openclaw.json && \
     chown -R node:node /home/node/.openclaw
 
+# Install uv for skill script execution (used by etoro_monitor and other skills).
+# Installed to /usr/local/bin so it is available system-wide regardless of user.
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
+ && if [ ! -e /usr/local/bin/uvx ]; then ln -sf /usr/local/bin/uv /usr/local/bin/uvx; fi
+
 # Clone the shared envoy tools repo (skills live under skills/ within it).
 # Token is passed as a build secret — never stored in any image layer.
+# Pass --build-arg ENVOY_TOOLS_CACHE_BUST=$(date +%s) to force a fresh clone
+# (e.g. when envoy-tools changed but no other Dockerfile layer changed).
+ARG ENVOY_TOOLS_CACHE_BUST=none
 RUN --mount=type=secret,id=github_token \
     git clone https://$(cat /run/secrets/github_token)@github.com/Puli-AI-com/Puli-envoy-tools.git /app/envoy-tools \
     && chown -R node:node /app/envoy-tools
@@ -291,6 +299,23 @@ COPY --from=be_app SKILL.md /app/envoy-tools/skills/db_client/SKILL.md
 COPY --from=be_app clients/ /app/envoy-tools/skills/db_client/scripts/
 COPY --from=be_app cli/ /app/envoy-tools/skills/db_client/scripts/
 RUN chown -R node:node /app/envoy-tools/skills/db_client
+
+# Customer RampUp skills (application_discovery + catalog_builder) plus their shared,
+# read-only dependencies, assembled under RAMPUP_HOME with the repo subtree preserved so
+# the skills' relative references (qa_guidelines/, runner/jobs/, packages/) resolve
+# unchanged. Discovery output is written separately under RAMPUP_DATA_DIR (Paula's
+# workspace) — never into this read-only bundle.
+# Sources are injected via additional build contexts (see docker-compose).
+ENV RAMPUP_HOME=/app/envoy-tools/skills/rampup
+ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/skills/rampup/packages/screen_bundle/src
+COPY --from=rampup_skills application_discovery /app/envoy-tools/skills/rampup/customer_rampup/application_discovery
+COPY --from=rampup_skills catalog_builder       /app/envoy-tools/skills/rampup/customer_rampup/catalog_builder
+COPY --from=rampup_skills README.md             /app/envoy-tools/skills/rampup/customer_rampup/README.md
+COPY --from=rampup_skills templates             /app/envoy-tools/skills/rampup/customer_rampup/templates
+COPY --from=qa_guidelines .                     /app/envoy-tools/skills/rampup/qa_guidelines
+COPY --from=runner_jobs   .                     /app/envoy-tools/skills/rampup/runner/jobs
+COPY --from=screen_bundle .                     /app/envoy-tools/skills/rampup/packages/screen_bundle
+RUN chown -R node:node /app/envoy-tools/skills/rampup
 
 # Security hardening: Run as non-root user
 # The node:24-bookworm image includes a 'node' user (uid 1000)

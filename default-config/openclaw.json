@@ -40,12 +40,16 @@
     "defaults": {
       "model": {
         "primary": "litellm/claude-sonnet-4-6"
-      }
+      },
+      "skipBootstrap": true
     }
   },
   "skills": {
     "load": {
-      "extraDirs": ["/app/envoy-tools/skills"]
+      "extraDirs": [
+        "/app/envoy-tools/skills",
+        "/app/envoy-tools/skills/rampup/customer_rampup"
+      ]
     }
   }
 }
