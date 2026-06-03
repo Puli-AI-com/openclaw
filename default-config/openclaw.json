@@ -11,6 +11,14 @@
       }
     }
   },
+  "hooks": {
+    "enabled": true,
+    "token": "${OPENCLAW_HOOKS_TOKEN}",
+    "allowedAgentIds": ["paula"],
+    "defaultSessionKey": "hook:rampup",
+    "allowRequestSessionKey": true,
+    "allowedSessionKeyPrefixes": ["hook:rampup:"]
+  },
   "channels": {
     "telegram": {
       "groupPolicy": "open"
