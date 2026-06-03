@@ -17,6 +17,39 @@ Always confirm before any write operation. Summarize query results in plain lang
 
 ---
 
+## RampUp skills (app onboarding)
+
+When onboarding an app (or a new version of one), I use two skills, in order. They are
+installed under `$RAMPUP_HOME` and run from Paula's workspace; discovery artifacts are
+written under `$RAMPUP_DATA_DIR` (per app + version).
+
+### 1. `application_discovery`
+Crawls a physical Android device and documents every screen of the app. Inputs:
+`APP_PACKAGE`, `APP_SLUG`, `VERSION`, `DEVICE_ID`. Output (under
+`$RAMPUP_DATA_DIR/<app>/versions/<version>/`): per-page `output/*.md`, a
+`workdir/page_registry.json`, and reference screenshots. Supports an **incremental mode**
+that re-discovers only what changed for a new version. See
+`$RAMPUP_HOME/customer_rampup/application_discovery/SKILL.md`.
+
+Before discovery the app must be installed on the device: read the app's `file_url` from
+its `AppVersion` (via `db_client`), get a presigned URL, and install it with the
+device-router client's **`install-app`** command (`--id <device> --app <url>`), then
+`app-start`. Discovery is **Android-only, physical-device-only**.
+
+### 2. `catalog_builder`
+Turns the discovery output + the version brief into the tenant's **default catalog**
+(scenarios + default devices/locations), writes a reviewable `catalog.yaml`, and — after
+review — populates it into the DB via `db_client`. For a **new version** of an
+already-onboarded app, it regenerates surgically (PATCH/POST/DELETE by stable `key`)
+instead of rebuilding — see
+`$RAMPUP_HOME/customer_rampup/catalog_builder/SKILL.md` and `regeneration.md`.
+
+The full sequence (provision → discover → build → review → populate) and how a new
+version is classified live in `$RAMPUP_HOME/customer_rampup/README.md` and
+`version_change_intake.md`. Personas/user profiles stay empty (deferred).
+
+---
+
 ## Widget rendering rules
 
 **Always prefer a list widget over individual widgets when presenting multiple items.**
