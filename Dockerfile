@@ -305,11 +305,12 @@ RUN chown -R node:node /app/envoy-tools/skills/db_client
 # Sources are injected via additional build contexts (see docker-compose).
 ENV RAMPUP_HOME=/app/envoy-tools/skills/rampup
 ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/skills/rampup/packages/screen_bundle/src
-COPY --from=rampup_skills application_discovery /app/envoy-tools/skills/rampup/customer_rampup/application_discovery
-COPY --from=rampup_skills catalog_builder       /app/envoy-tools/skills/rampup/customer_rampup/catalog_builder
-COPY --from=rampup_skills README.md             /app/envoy-tools/skills/rampup/customer_rampup/README.md
-COPY --from=rampup_skills templates             /app/envoy-tools/skills/rampup/customer_rampup/templates
-COPY --from=qa_guidelines .                     /app/envoy-tools/skills/rampup/qa_guidelines
+COPY --from=shared_skills application-discovery               /app/envoy-tools/skills/rampup/customer_rampup/application_discovery
+COPY --from=shared_skills catalog-builder                     /app/envoy-tools/skills/rampup/customer_rampup/catalog_builder
+COPY --from=shared_skills customer-rampup/SKILL.md           /app/envoy-tools/skills/rampup/customer_rampup/SKILL.md
+COPY --from=shared_skills customer-rampup/references/README.md /app/envoy-tools/skills/rampup/customer_rampup/README.md
+COPY --from=shared_skills customer-rampup/references/templates /app/envoy-tools/skills/rampup/customer_rampup/templates
+COPY --from=shared_skills qa-guidelines/references/          /app/envoy-tools/skills/rampup/qa_guidelines/
 COPY --from=runner_jobs   .                     /app/envoy-tools/skills/rampup/runner/jobs
 COPY --from=screen_bundle .                     /app/envoy-tools/skills/rampup/packages/screen_bundle
 RUN chown -R node:node /app/envoy-tools/skills/rampup
