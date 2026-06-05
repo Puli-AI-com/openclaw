@@ -297,6 +297,10 @@ RUN chmod +x /app/entrypoint.sh
 COPY --from=shared_skills db_client/ /app/envoy-tools/skills/db_client/
 RUN chown -R node:node /app/envoy-tools/skills/db_client
 
+# Copy device-router-client skill (docs + package + scripts) from shared skills.
+COPY --from=shared_skills device-router-client/ /app/envoy-tools/skills/device-router-client/
+RUN chown -R node:node /app/envoy-tools/skills/device-router-client
+
 # Customer RampUp skills (application_discovery + catalog_builder) plus their shared,
 # read-only dependencies, assembled under RAMPUP_HOME with the repo subtree preserved so
 # the skills' relative references (qa_guidelines/, runner/jobs/, packages/) resolve
