@@ -292,12 +292,9 @@ COPY --chown=node:node profiles /app/profiles
 COPY --chown=node:node entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Copy the BE Python client + CLI into the crowdtest skill directory so the
-# skill can shell out to them without needing a separate container.
-# Source is injected via the `be_app` additional build context (see docker-compose).
-COPY --from=be_app SKILL.md /app/envoy-tools/skills/db_client/SKILL.md
-COPY --from=be_app clients/ /app/envoy-tools/skills/db_client/scripts/
-COPY --from=be_app cli/ /app/envoy-tools/skills/db_client/scripts/
+# Copy db_client from the shared in-repo skills directory.
+# Source is injected via the `shared_skills` additional build context (see docker-compose).
+COPY --from=shared_skills db_client/ /app/envoy-tools/skills/db_client/
 RUN chown -R node:node /app/envoy-tools/skills/db_client
 
 # Customer RampUp skills (application_discovery + catalog_builder) plus their shared,
