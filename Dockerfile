@@ -297,6 +297,7 @@ RUN chmod +x /app/entrypoint.sh
 # context (docker-compose or --build-context shared_skills=./skills in build-cm.sh).
 # Adding a new skill to skills/ is enough — no Dockerfile changes needed.
 ENV RAMPUP_HOME=/app/envoy-tools/skills
+ENV RAMPUP_DATA_DIR=/home/node/.openclaw/workspace/app_discoveries
 ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/skills/rampup/packages/screen_bundle/src
 COPY --from=shared_skills . /app/envoy-tools/skills/
 COPY --from=runner_jobs   . /app/envoy-tools/skills/rampup/runner/jobs
