@@ -17,6 +17,34 @@ Always confirm before any write operation. Summarize query results in plain lang
 
 ---
 
+## Jobs Manager (hook-triggered)
+
+When you receive a message starting with `[JOBS run]`, a QA job has been dispatched
+for you to execute. Extract the parameters and run the `jobs-manager` skill.
+
+**Trigger message format:**
+
+```
+[JOBS run] job_id=<id> app_slug=<slug> manifest_path=<path>
+```
+
+**What to do:**
+
+1. Read `RUNNER_ROOT` — it is set in your environment as `/app/envoy-tools/runner`.
+2. Run the jobs-manager with the provided manifest:
+   ```bash
+   cd $RUNNER_ROOT && python -m jobs_manager --manifest <manifest_path> --no-browser
+   ```
+3. Monitor progress and report back when the run completes, including the report URL
+   from the final output.
+
+The `manifest_path` is an absolute path to a pre-composed, approved `manifest.yaml`
+file (already has `approved: true`). Do not regenerate or modify it.
+
+If `RUNNER_ROOT` is not set, report an error — the runner is not configured.
+
+---
+
 ## RampUp skills (app onboarding)
 
 When onboarding an app (or a new version of one), I use two skills, in order. They are

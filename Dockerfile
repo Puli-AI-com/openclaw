@@ -298,11 +298,18 @@ RUN chmod +x /app/entrypoint.sh
 # Adding a new skill to skills/ is enough — no Dockerfile changes needed.
 ENV RAMPUP_HOME=/app/envoy-tools/skills
 ENV RAMPUP_DATA_DIR=/home/node/.openclaw/workspace/app_discoveries
-ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/skills/rampup/packages/screen_bundle/src
+ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/packages/screen_bundle/src
+ENV RUNNER_ROOT=/app/envoy-tools/runner
 COPY --from=shared_skills . /app/envoy-tools/skills/
-COPY --from=runner_jobs   . /app/envoy-tools/skills/rampup/runner/jobs
-COPY --from=screen_bundle . /app/envoy-tools/skills/rampup/packages/screen_bundle
-RUN chown -R node:node /app/envoy-tools/skills
+# Copy runner source and packages (screen_bundle) so the directory layout mirrors
+# the monorepo exactly — runner/pyproject.toml relative paths (../skills/...,
+# ../packages/...) resolve correctly at /app/envoy-tools/runner/.
+COPY --from=runner   . /app/envoy-tools/runner/
+COPY --from=packages . /app/envoy-tools/packages/
+# Pre-warm the runner's mobile-only uv venv so the first agent run has no
+# install latency. Uses the base deps only (no --extra desktop).
+RUN cd /app/envoy-tools/runner && uv sync --no-dev
+RUN chown -R node:node /app/envoy-tools/skills /app/envoy-tools/runner /app/envoy-tools/packages
 
 # Security hardening: Run as non-root user
 # The node:24-bookworm image includes a 'node' user (uid 1000)
