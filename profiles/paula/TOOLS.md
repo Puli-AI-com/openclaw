@@ -29,7 +29,7 @@ Crawls a physical Android device and documents every screen of the app. Inputs:
 `$RAMPUP_DATA_DIR/<app>/versions/<version>/`): per-page `output/*.md`, a
 `workdir/page_registry.json`, and reference screenshots. Supports an **incremental mode**
 that re-discovers only what changed for a new version. See
-`$RAMPUP_HOME/customer_rampup/application_discovery/SKILL.md`.
+`$RAMPUP_HOME/application-discovery/SKILL.md`.
 
 Before discovery the app must be installed on the device: read the app's `file_url` from
 its `AppVersion` (via `db_client`), get a presigned URL, and install it with the
@@ -42,11 +42,11 @@ Turns the discovery output + the version brief into the tenant's **default catal
 review — populates it into the DB via `db_client`. For a **new version** of an
 already-onboarded app, it regenerates surgically (PATCH/POST/DELETE by stable `key`)
 instead of rebuilding — see
-`$RAMPUP_HOME/customer_rampup/catalog_builder/SKILL.md` and `regeneration.md`.
+`$RAMPUP_HOME/catalog-builder/SKILL.md` and `$RAMPUP_HOME/catalog-builder/references/regeneration.md`.
 
 The full sequence (provision → discover → build → review → populate) and how a new
-version is classified live in `$RAMPUP_HOME/customer_rampup/README.md` and
-`version_change_intake.md`. Personas/user profiles stay empty (deferred).
+version is classified live in `$RAMPUP_HOME/customer-rampup/references/README.md` and
+`$RAMPUP_HOME/customer-rampup/references/version_change_intake.md`. Personas/user profiles stay empty (deferred).
 
 ---
 

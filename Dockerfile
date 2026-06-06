@@ -292,32 +292,16 @@ COPY --chown=node:node profiles /app/profiles
 COPY --chown=node:node entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Copy db_client from the shared in-repo skills directory.
-# Source is injected via the `shared_skills` additional build context (see docker-compose).
-COPY --from=shared_skills db_client/ /app/envoy-tools/skills/db_client/
-RUN chown -R node:node /app/envoy-tools/skills/db_client
-
-# Copy device-router-client skill (docs + package + scripts) from shared skills.
-COPY --from=shared_skills device-router-client/ /app/envoy-tools/skills/device-router-client/
-RUN chown -R node:node /app/envoy-tools/skills/device-router-client
-
-# Customer RampUp skills (application_discovery + catalog_builder) plus their shared,
-# read-only dependencies, assembled under RAMPUP_HOME with the repo subtree preserved so
-# the skills' relative references (qa_guidelines/, runner/jobs/, packages/) resolve
-# unchanged. Discovery output is written separately under RAMPUP_DATA_DIR (Paula's
-# workspace) — never into this read-only bundle.
-# Sources are injected via additional build contexts (see docker-compose).
-ENV RAMPUP_HOME=/app/envoy-tools/skills/rampup
+# Copy all in-repo skills into the image.
+# The entire skills/ directory is injected via the `shared_skills` additional build
+# context (docker-compose or --build-context shared_skills=./skills in build-cm.sh).
+# Adding a new skill to skills/ is enough — no Dockerfile changes needed.
+ENV RAMPUP_HOME=/app/envoy-tools/skills
 ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/skills/rampup/packages/screen_bundle/src
-COPY --from=shared_skills application-discovery               /app/envoy-tools/skills/rampup/customer_rampup/application_discovery
-COPY --from=shared_skills catalog-builder                     /app/envoy-tools/skills/rampup/customer_rampup/catalog_builder
-COPY --from=shared_skills customer-rampup/SKILL.md           /app/envoy-tools/skills/rampup/customer_rampup/SKILL.md
-COPY --from=shared_skills customer-rampup/references/README.md /app/envoy-tools/skills/rampup/customer_rampup/README.md
-COPY --from=shared_skills customer-rampup/references/templates /app/envoy-tools/skills/rampup/customer_rampup/templates
-COPY --from=shared_skills qa-guidelines/references/          /app/envoy-tools/skills/rampup/qa_guidelines/
-COPY --from=runner_jobs   .                     /app/envoy-tools/skills/rampup/runner/jobs
-COPY --from=screen_bundle .                     /app/envoy-tools/skills/rampup/packages/screen_bundle
-RUN chown -R node:node /app/envoy-tools/skills/rampup
+COPY --from=shared_skills . /app/envoy-tools/skills/
+COPY --from=runner_jobs   . /app/envoy-tools/skills/rampup/runner/jobs
+COPY --from=screen_bundle . /app/envoy-tools/skills/rampup/packages/screen_bundle
+RUN chown -R node:node /app/envoy-tools/skills
 
 # Security hardening: Run as non-root user
 # The node:24-bookworm image includes a 'node' user (uid 1000)

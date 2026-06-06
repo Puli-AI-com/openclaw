@@ -55,8 +55,7 @@
   "skills": {
     "load": {
       "extraDirs": [
-        "/app/envoy-tools/skills",
-        "/app/envoy-tools/skills/rampup/customer_rampup"
+        "/app/envoy-tools/skills"
       ]
     }
   }
