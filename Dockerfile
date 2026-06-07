@@ -123,10 +123,10 @@ RUN pnpm canvas:a2ui:bundle || \
      echo "/* A2UI bundle unavailable in this build */" > src/canvas-host/a2ui/a2ui.bundle.js && \
      echo "stub" > src/canvas-host/a2ui/.bundle.hash && \
      rm -rf vendor/a2ui apps/shared/OpenClawKit/Tools/CanvasA2UI)
-RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm build:docker
+RUN TOKIO_WORKER_THREADS=2 NODE_OPTIONS=--max-old-space-size=1536 pnpm build:docker
 # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)
 ENV OPENCLAW_PREFER_PNPM=1
-RUN NODE_OPTIONS=--max-old-space-size=2048 pnpm ui:build
+RUN TOKIO_WORKER_THREADS=2 NODE_OPTIONS=--max-old-space-size=1536 pnpm ui:build
 
 # Prune dev dependencies and strip build-only metadata before copying
 # runtime assets into the final image.
