@@ -3,7 +3,7 @@
 # Usage: ./scripts/build-envoy.sh
 #
 # NOTE: The canonical build is scripts/build-cm.sh at the repo root — it passes
-# the shared_skills/runner/packages/be_app build contexts the Dockerfile requires.
+# the shared_skills/runner/packages build contexts the Dockerfile requires.
 # This script does not and is kept only as a thin reference.
 #
 # Requires:
