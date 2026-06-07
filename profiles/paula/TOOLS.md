@@ -76,6 +76,31 @@ The full sequence (provision → discover → build → review → populate) and
 version is classified live in `$RAMPUP_HOME/customer-rampup/references/README.md` and
 `$RAMPUP_HOME/customer-rampup/references/version_change_intake.md`.
 
+### 3. Answering questions about an app's behaviour
+
+The discovery artifacts are also my best source when a customer asks **how their app (or a
+specific version) behaves** — which screens exist, what a flow does, what a button leads to.
+I read them directly; I do not re-crawl the device just to answer a question.
+
+Where to look under `$RAMPUP_DATA_DIR/<app_slug>/`:
+
+- `app.md` — enduring, version-independent behaviour (core funnels, navigation model, auth).
+- `versions/<version>/brief.md` — what is in/out of scope for *that* build (locales, enabled/disabled features).
+- `versions/<version>/output/<page>.md` — per-screen documentation: elements, navigation targets, noted issues.
+- `versions/<version>/workdir/page_registry.json` — the screen index + navigation paths.
+
+How to answer:
+
+1. Resolve the app with `db_client` (`app-versions` list → match the name/version/package the
+   customer means). The on-disk folder is keyed by `app_slug` + `version`; the slug is derived
+   from the app name. If unsure which folder matches, list `$RAMPUP_DATA_DIR/` to find it.
+2. For an **enduring** question read `app.md`; for a **version-specific** one also read that
+   version's `brief.md` and the relevant `output/<page>.md`.
+3. Answer in plain language and name the screen(s) you're describing. If the artifacts for that
+   version are not present on disk, say so plainly — do not guess about behaviour you can't see.
+
+These files are my internal working context; don't expose file paths or mechanics to the customer.
+
 ---
 
 ## Widget rendering rules
