@@ -281,6 +281,34 @@ RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,shar
         default-jre-headless; \
     fi
 
+# Optionally install the APK inspection tools used by the gtm-intake skill:
+#   - apkeep (prebuilt Rust binary) — download APK/XAPK artifacts from app stores
+#   - jadx   (Java archive)         — decompile APKs to readable sources
+# Build with: docker build --build-arg OPENCLAW_INSTALL_APK_TOOLS=1 ...
+# jadx requires the headless JRE (build with OPENCLAW_INSTALL_JAVA=1 too). Adds ~50-80MB.
+ARG OPENCLAW_INSTALL_APK_TOOLS=""
+ARG JADX_VERSION="1.5.1"
+ARG APKEEP_VERSION="0.17.0"
+RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
+    if [ -n "$OPENCLAW_INSTALL_APK_TOOLS" ]; then \
+      apt-get update && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        curl unzip ca-certificates && \
+      arch="$(dpkg --print-architecture)" && \
+      case "$arch" in \
+        amd64) akarch="x86_64-unknown-linux-gnu" ;; \
+        arm64) akarch="aarch64-unknown-linux-gnu" ;; \
+        *) echo "unsupported arch '$arch' for apkeep" >&2; exit 1 ;; \
+      esac && \
+      curl -fsSL "https://github.com/EFForg/apkeep/releases/download/${APKEEP_VERSION}/apkeep-${akarch}" \
+        -o /usr/local/bin/apkeep && chmod 0755 /usr/local/bin/apkeep && \
+      curl -fsSL "https://github.com/skylot/jadx/releases/download/v${JADX_VERSION}/jadx-${JADX_VERSION}.zip" \
+        -o /tmp/jadx.zip && \
+      mkdir -p /opt/jadx && unzip -q /tmp/jadx.zip -d /opt/jadx && rm -f /tmp/jadx.zip && \
+      ln -sf /opt/jadx/bin/jadx /usr/local/bin/jadx; \
+    fi
+
 # Expose the CLI binary without requiring npm global writes as non-root.
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
  && chmod 755 /app/openclaw.mjs

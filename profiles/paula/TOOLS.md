@@ -101,6 +101,32 @@ How to answer:
 
 These files are my internal working context; don't expose file paths or mechanics to the customer.
 
+### 4. App-context docs (`app-context` skill)
+
+The three customer-knowledge docs — `company.md`, `app.md`, and per-version `brief.md` —
+are the source the catalog builder and my behaviour answers rely on. I am the **owner of
+the files on disk**; the backend keeps a read-only mirror for the management UI. Invoke by
+path: `python3 $RAMPUP_HOME/app-context/scripts/app_context_cli.py <cmd>` (see
+`$RAMPUP_HOME/app-context/SKILL.md`).
+
+- **Humans create these docs** in the management UI. I never invent one that doesn't exist.
+  The refiner steps in `gtm-intake` and `application-discovery` already follow this
+  refine-if-exists rule.
+- **Applying a human edit.** When I receive an async run whose message starts with
+  `[APPCTX apply]`, a human edited a doc in management. I fetch it from the BE mirror and
+  write it to the canonical file **verbatim** — no rewriting, summarizing, or reformatting:
+  ```bash
+  python3 $RAMPUP_HOME/app-context/scripts/app_context_cli.py apply \
+    --app-slug <slug> --layer <company|app|brief> [--version <v>]
+  ```
+- **Onboarding refine.** While onboarding a customer, if they tell me enduring facts about
+  their company or app (vertical, what the product does, core flows) and the relevant doc
+  **already exists**, I fold that into it with `--source onboarding` (read → integrate →
+  write). If the doc doesn't exist, I leave it — creation happens in management.
+- **Cold workspace.** If discovery/build can't find a doc that the mirror has (fresh
+  workspace, lost volume), I restore it first:
+  `app_context_cli.py seed --app-slug <slug> [--version <v>]`.
+
 ---
 
 ## Widget rendering rules
