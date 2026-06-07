@@ -87,7 +87,7 @@ const pluginSdkEntrypoints = [
   "keyed-async-queue",
 ] as const;
 
-export default defineConfig([
+const allBuildConfigs = [
   nodeBuildConfig({
     entry: "src/index.ts",
   }),
@@ -128,4 +128,34 @@ export default defineConfig([
   nodeBuildConfig({
     entry: ["src/hooks/bundled/*/handler.ts", "src/hooks/llm-slug-generator.ts"],
   }),
-]);
+];
+
+// Memory-bounded chunked bundling for constrained builders (e.g. QEMU
+// amd64-on-arm64, where the whole-array bundle exceeds the VM memory ceiling).
+// Set TSDOWN_BUILD_CHUNK="i/n" to bundle only the i-th of n contiguous slices.
+// Each invocation is a fresh process, so peak memory is reclaimed between
+// passes. Chunked runs disable `clean` so a later chunk does not wipe the
+// dist output produced by earlier chunks (Docker builds start from an empty
+// dist, so nothing stale remains). When the env var is unset the full,
+// unchanged config array is built (preserving CI/local behavior exactly).
+function selectBuildChunk<T>(items: T[], spec: string | undefined): T[] | null {
+  if (!spec) return null;
+  const match = /^(\d+)\/(\d+)$/.exec(spec.trim());
+  if (!match) {
+    throw new Error(`Invalid TSDOWN_BUILD_CHUNK="${spec}" — expected "i/n" (e.g. "1/4")`);
+  }
+  const index = Number(match[1]);
+  const total = Number(match[2]);
+  if (index < 1 || total < 1 || index > total) {
+    throw new Error(`Invalid TSDOWN_BUILD_CHUNK="${spec}" — require 1 <= i <= n`);
+  }
+  const size = Math.ceil(items.length / total);
+  const start = (index - 1) * size;
+  return items.slice(start, start + size);
+}
+
+const chunk = selectBuildChunk(allBuildConfigs, process.env.TSDOWN_BUILD_CHUNK);
+
+export default defineConfig(
+  chunk === null ? allBuildConfigs : chunk.map((config) => ({ ...config, clean: false })),
+);

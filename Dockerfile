@@ -123,7 +123,20 @@ RUN pnpm canvas:a2ui:bundle || \
      echo "/* A2UI bundle unavailable in this build */" > src/canvas-host/a2ui/a2ui.bundle.js && \
      echo "stub" > src/canvas-host/a2ui/.bundle.hash && \
      rm -rf vendor/a2ui apps/shared/OpenClawKit/Tools/CanvasA2UI)
-RUN TOKIO_WORKER_THREADS=2 NODE_OPTIONS=--max-old-space-size=1536 pnpm build:docker
+# Bundle the ~50 tsdown configs in sequential chunks to bound peak memory.
+# A whole-array bundle OOMs on constrained builders (notably QEMU
+# amd64-on-arm64). Each chunk runs in a fresh node process so rolldown's
+# native (Rust) memory is fully reclaimed between passes. The post-bundle
+# steps (dts generation, asset copies) run once afterwards.
+ARG OPENCLAW_BUILD_CHUNKS=4
+RUN set -eux; \
+    for chunk in $(seq 1 "$OPENCLAW_BUILD_CHUNKS"); do \
+      echo "tsdown bundle chunk ${chunk}/${OPENCLAW_BUILD_CHUNKS}"; \
+      TSDOWN_BUILD_CHUNK="${chunk}/${OPENCLAW_BUILD_CHUNKS}" \
+      TOKIO_WORKER_THREADS=2 NODE_OPTIONS=--max-old-space-size=1536 \
+        node scripts/tsdown-build.mjs; \
+    done
+RUN TOKIO_WORKER_THREADS=2 NODE_OPTIONS=--max-old-space-size=1536 pnpm build:docker:post
 # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)
 ENV OPENCLAW_PREFER_PNPM=1
 RUN TOKIO_WORKER_THREADS=2 NODE_OPTIONS=--max-old-space-size=1536 pnpm ui:build
