@@ -268,6 +268,19 @@ RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,shar
         docker-ce-cli docker-compose-plugin; \
     fi
 
+# Optionally install a headless JRE for skills that shell out to Java tools
+# (apk-download's APKEditor.jar for XAPK→APK merges, gtm-decompile-analyze's apktool).
+# Build with: docker build --build-arg OPENCLAW_INSTALL_JAVA=1 ...
+# Adds ~120-180MB. Headless JRE only — no JDK and no GUI/AWT libraries.
+ARG OPENCLAW_INSTALL_JAVA=""
+RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
+    if [ -n "$OPENCLAW_INSTALL_JAVA" ]; then \
+      apt-get update && \
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        default-jre-headless; \
+    fi
+
 # Expose the CLI binary without requiring npm global writes as non-root.
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
  && chmod 755 /app/openclaw.mjs
