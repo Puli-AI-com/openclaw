@@ -13,9 +13,9 @@
   },
   "hooks": {
     "enabled": true,
-    "token": "${OPENCLAW_GATEWAY_TOKEN}",
+    "token": "${OPENCLAW_HOOKS_TOKEN}",
     "allowedAgentIds": ["paula"],
-    "defaultSessionKey": "hook:rampup",
+    "defaultSessionKey": "hook:rampup:default",
     "allowRequestSessionKey": true,
     "allowedSessionKeyPrefixes": ["hook:rampup:", "hook:jobs:"]
   },

@@ -290,25 +290,18 @@ RUN mkdir -p /home/node/.openclaw && \
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh \
  && if [ ! -e /usr/local/bin/uvx ]; then ln -sf /usr/local/bin/uv /usr/local/bin/uvx; fi
 
-# Clone the shared envoy tools repo (skills live under skills/ within it).
-# Token is passed as a build secret — never stored in any image layer.
-# Pass --build-arg ENVOY_TOOLS_CACHE_BUST=$(date +%s) to force a fresh clone
-# (e.g. when envoy-tools changed but no other Dockerfile layer changed).
-ARG ENVOY_TOOLS_CACHE_BUST=none
-RUN --mount=type=secret,id=github_token \
-    git clone https://$(cat /run/secrets/github_token)@github.com/Puli-AI-com/Puli-envoy-tools.git /app/envoy-tools \
-    && chown -R node:node /app/envoy-tools
-
 # Bot profile workspace files — seeded into the openclaw workspace at startup
 # by entrypoint.sh based on the BOT_PROFILE env var.
 COPY --chown=node:node profiles /app/profiles
 COPY --chown=node:node entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
-# Copy all in-repo skills into the image.
+# Copy all in-repo skills into the image at /app/envoy-tools/skills.
 # The entire skills/ directory is injected via the `shared_skills` additional build
 # context (docker-compose or --build-context shared_skills=./skills in build-cm.sh).
 # Adding a new skill to skills/ is enough — no Dockerfile changes needed.
+# NOTE: /app/envoy-tools is created by the COPY commands below; it is no longer a
+# git clone of Puli-envoy-tools — skills/runner/packages all come from the monorepo.
 ENV RAMPUP_HOME=/app/envoy-tools/skills
 ENV RAMPUP_DATA_DIR=/home/node/.openclaw/workspace/app_discoveries
 ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/packages/screen_bundle/src
