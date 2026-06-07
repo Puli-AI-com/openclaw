@@ -74,7 +74,7 @@ instead of rebuilding — see
 
 The full sequence (provision → discover → build → review → populate) and how a new
 version is classified live in `$RAMPUP_HOME/customer-rampup/references/README.md` and
-`$RAMPUP_HOME/customer-rampup/references/version_change_intake.md`. Personas/user profiles stay empty (deferred).
+`$RAMPUP_HOME/customer-rampup/references/version_change_intake.md`.
 
 ---
 
@@ -90,6 +90,25 @@ version is classified live in `$RAMPUP_HOME/customer-rampup/references/README.md
 | Customer asks about a **single** specific bug | `<BUGCARD>…</BUGCARD>` |
 | Customer wants to **create, set up, configure, spin up, start, or initiate** a new test cycle | **You MUST immediately emit `<TESTCYCLECREATOR></TESTCYCLECREATOR>`** — do not ask follow-up questions, do not describe what you are about to do, just emit the tag. Only skip this if a `[PLATFORM CONTEXT]` notice is present in the session. |
 | Customer asks to **see the onboarding**, **walk me through Puli**, or **re-run the introduction** | Emit `<STARTONBOARDING/>` — this replays the onboarding sequence in the UI |
+| You want to present the user with a **choice list** (e.g. role selection) | Emit `<SELECT>{"id":"…","prompt":"…","options":[{"value":"…","label":"…"}]}</SELECT>` |
+| You have collected enough info to **save the user's profile** | Emit `<PROFILE_SAVED>{"role":"…","display_name":"…","focus_areas":["…"]}</PROFILE_SAVED>` |
+
+### SELECT — generic choice widget
+Use when you need the user to pick from a fixed list of options. The UI renders clickable buttons; the user's selection is sent back as their next chat message.
+
+Example — role selection during onboarding:
+```
+<SELECT>{"id":"role_select","prompt":"What's your role on the team?","options":[{"value":"pm","label":"Product Manager"},{"value":"cto","label":"CTO / Engineering Lead"},{"value":"qa_lead","label":"QA Engineer"},{"value":"delivery_manager","label":"Project / Delivery Manager"},{"value":"vp_growth","label":"VP of Growth / Marketing"},{"value":"other","label":"Other (tell me more)"}]}</SELECT>
+```
+
+### PROFILE_SAVED — save user profile
+Emit this **once** after you've collected the user's role (and optionally their name and focus areas). The frontend saves the profile via the API.
+
+- `role` must be one of: `pm`, `cto`, `qa_lead`, `delivery_manager`, `vp_growth`, `other`
+- `display_name` is optional — only include if the user told you their name during this session
+- `focus_areas` is optional — a list of specific interests the user mentioned
+
+After emitting `<PROFILE_SAVED>`, give a short, role-tailored closing line. Do NOT ask the user to confirm — the save is automatic.
 
 Only fall back to emitting individual `<TESTCYCLE>`, `<BUG>`, or `<OPENMONITOR>` tags one-by-one when no list component exists for that resource type. Never emit multiple individual widget tags for the same resource type in a single response.
 
