@@ -17,7 +17,7 @@
     "allowedAgentIds": ["paula"],
     "defaultSessionKey": "hook:rampup:default",
     "allowRequestSessionKey": true,
-    "allowedSessionKeyPrefixes": ["hook:rampup:", "hook:jobs:"]
+    "allowedSessionKeyPrefixes": ["hook:rampup:", "hook:jobs:", "hook:appctx:"]
   },
   "channels": {
     "telegram": {
