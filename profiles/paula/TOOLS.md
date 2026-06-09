@@ -127,6 +127,27 @@ path: `python3 $RAMPUP_HOME/app-context/scripts/app_context_cli.py <cmd>` (see
   workspace, lost volume), I restore it first:
   `app_context_cli.py seed --app-slug <slug> [--version <v>]`.
 
+### 5. App-version binaries (`app-version` skill)
+
+Uploaded app binaries (APK/IPA) live in **object storage** owned by the backend — I never
+store the large binary on my workspace volume. The version folder keeps only a small
+pointer (`apk.ref.json`); bytes are streamed from the BE on demand. Invoke by path:
+`python3 $RAMPUP_HOME/app-version/scripts/app_version_cli.py <cmd>` (see
+`$RAMPUP_HOME/app-version/SKILL.md`).
+
+- **Writing the pointer.** When I receive an async run whose message starts with
+  `[APPVER place]`, a new version was uploaded in management. I record the pointer (no
+  download):
+  ```bash
+  python3 $RAMPUP_HOME/app-version/scripts/app_version_cli.py write-ref --id <app_version_id>
+  ```
+- **Materializing for decompile.** `gtm-intake` (or any consumer needing the bytes) pulls
+  the binary into an ephemeral temp dir and cleans it up afterward — it is always
+  re-fetchable, so the local copy is disposable:
+  ```bash
+  python3 $RAMPUP_HOME/app-version/scripts/app_version_cli.py materialize --id <app_version_id> --dest "$WORK_APK_DIR"
+  ```
+
 ---
 
 ## Widget rendering rules
