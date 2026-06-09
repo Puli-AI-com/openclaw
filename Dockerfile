@@ -353,6 +353,14 @@ COPY --from=shared_skills . /app/envoy-tools/skills/
 # ../packages/...) resolve correctly at /app/envoy-tools/runner/.
 COPY --from=runner   . /app/envoy-tools/runner/
 COPY --from=packages . /app/envoy-tools/packages/
+# The additional build contexts copy the host working tree verbatim and do NOT
+# honor .gitignore, so any local virtualenvs / bytecode caches (often built for
+# a different OS/Python, e.g. a macOS .venv) get baked in. Strip them so `uv`
+# provisions clean, correct envs on first run instead of choking on a stale one.
+RUN find /app/envoy-tools/skills /app/envoy-tools/packages \
+      -type d \( -name .venv -o -name __pycache__ \) -prune -exec rm -rf {} + \
+    && find /app/envoy-tools/runner \
+      -type d \( -name .venv -o -name __pycache__ \) -prune -exec rm -rf {} +
 # Pre-warm the runner's mobile-only uv venv so the first agent run has no
 # install latency. Uses the base deps only (no --extra desktop).
 RUN cd /app/envoy-tools/runner && uv sync --no-dev
