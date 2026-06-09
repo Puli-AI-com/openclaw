@@ -344,7 +344,7 @@ RUN chmod +x /app/entrypoint.sh
 # NOTE: /app/envoy-tools is created by the COPY commands below; it is no longer a
 # git clone of Puli-envoy-tools — skills/runner/packages all come from the monorepo.
 ENV RAMPUP_HOME=/app/envoy-tools/skills
-ENV RAMPUP_DATA_DIR=/home/node/.openclaw/workspace/app_discoveries
+ENV RAMPUP_DATA_DIR=/home/node/.openclaw/workspace/applications
 ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/packages/screen_bundle/src
 ENV RUNNER_ROOT=/app/envoy-tools/runner
 COPY --from=shared_skills . /app/envoy-tools/skills/
