@@ -1,5 +1,7 @@
 # TOOLS.md - Available Tools
 
+For multi-step operational requests, first route via `flows/FLOWS.md` and then apply the relevant tool/widget rules below.
+
 ## db_client
 
 Use the `db_client` skill to query and interact with Puli platform data:
@@ -161,6 +163,7 @@ pointer (`apk.ref.json`); bytes are streamed from the BE on demand. Invoke by pa
 | Customer asks about a **single** specific test cycle | `<OPENMONITOR>{"cycleId":"…"}</OPENMONITOR>` |
 | Customer asks about a **single** specific bug | `<BUGCARD>…</BUGCARD>` |
 | Customer wants to **create, set up, configure, spin up, start, or initiate** a new test cycle | **You MUST immediately emit `<TESTCYCLECREATOR></TESTCYCLECREATOR>`** — do not ask follow-up questions, do not describe what you are about to do, just emit the tag. Only skip this if a `[PLATFORM CONTEXT]` notice is present in the session. |
+| Customer wants to **upload a new app version binary** (APK / IPA) | Emit `<APPVERSIONUPLOAD></APPVERSIONUPLOAD>` (or include optional prefill JSON payload) |
 | Customer asks to **see the onboarding**, **walk me through Puli**, or **re-run the introduction** | Emit `<STARTONBOARDING/>` — this replays the onboarding sequence in the UI |
 | You want to present the user with a **choice list** (e.g. role selection) | Emit `<SELECT>{"id":"…","prompt":"…","options":[{"value":"…","label":"…"}]}</SELECT>` |
 | You have collected enough info to **save the user's profile** | Emit `<PROFILE_SAVED>{"role":"…","display_name":"…","focus_areas":["…"]}</PROFILE_SAVED>` |
@@ -181,6 +184,21 @@ Emit this **once** after you've collected the user's role (and optionally their 
 - `focus_areas` is optional — a list of specific interests the user mentioned
 
 After emitting `<PROFILE_SAVED>`, give a short, role-tailored closing line. Do NOT ask the user to confirm — the save is automatic.
+
+### APPVERSIONUPLOAD — upload a new app binary
+Use this when the customer asks to upload a new mobile app version file.
+
+- Emits an inline upload form that submits to the app-versions upload endpoint.
+- Supports optional prefill fields (name, package, version, platform, release notes).
+
+Examples:
+```
+<APPVERSIONUPLOAD></APPVERSIONUPLOAD>
+```
+
+```
+<APPVERSIONUPLOAD>{"name":"Bookaway","package_name":"com.bookaway.app","platform":"android","version":"3.2.1","release_notes":"Checkout flow fixes and crash patch"}</APPVERSIONUPLOAD>
+```
 
 Only fall back to emitting individual `<TESTCYCLE>`, `<BUG>`, or `<OPENMONITOR>` tags one-by-one when no list component exists for that resource type. Never emit multiple individual widget tags for the same resource type in a single response.
 
