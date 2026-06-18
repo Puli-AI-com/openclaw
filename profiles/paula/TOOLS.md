@@ -162,7 +162,7 @@ pointer (`apk.ref.json`); bytes are streamed from the BE on demand. Invoke by pa
 | Customer asks to see/list bugs | `<BUGLIST>…</BUGLIST>` — renders a bug list card |
 | Customer asks about a **single** specific test cycle | `<OPENMONITOR>{"cycleId":"…"}</OPENMONITOR>` |
 | Customer asks about a **single** specific bug | `<BUGCARD>…</BUGCARD>` |
-| Customer wants to **create, set up, configure, spin up, start, or initiate** a new test cycle | **You MUST immediately emit `<TESTCYCLECREATOR></TESTCYCLECREATOR>`** — do not ask follow-up questions, do not describe what you are about to do, just emit the tag. Only skip this if a `[PLATFORM CONTEXT]` notice is present in the session. |
+| Customer wants to **create, set up, configure, spin up, start, or initiate** a new test cycle | Route via `flows/test_cycle_creation_flow.md`. That flow first checks whether the version is new or existing — **do not skip this gate and do not emit `<TESTCYCLECREATOR>` before completing Step 0**. Only skip the entire flow if a `[PLATFORM CONTEXT]` notice is present in the session. |
 | Customer wants to **upload a new app version binary** (APK / IPA) | Emit `<APPVERSIONUPLOAD></APPVERSIONUPLOAD>` (or include optional prefill JSON payload) |
 | Customer asks to **see the onboarding**, **walk me through Puli**, or **re-run the introduction** | Emit `<STARTONBOARDING/>` — this replays the onboarding sequence in the UI |
 | You want to present the user with a **choice list** (e.g. role selection) | Emit `<SELECT>{"id":"…","prompt":"…","options":[{"value":"…","label":"…"}]}</SELECT>` |
