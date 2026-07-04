@@ -1,7 +1,8 @@
-# HEARTBEAT.md - Periodic Checks
+# HEARTBEAT — disabled
 
-On each heartbeat run:
+Health checks are now handled by an automated Python cron job running inside
+the CM container (`skills/puli_health_check/scripts/health_check.py`).
 
-- Flag any test cycles that have stalled or have scenario runs stuck in `in_progress` for longer than expected
-- Surface bug reports sitting in `unvalidated` status without triage
-- Note any test cycles that completed recently but haven't been reviewed
+The gateway heartbeat is disabled (`gateway.heartbeat.enabled: false` in
+`default-config/openclaw.json`).  This file is kept as a reference only and
+is no longer sent to the LLM.

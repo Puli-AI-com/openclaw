@@ -1,5 +1,8 @@
 {
   "gateway": {
+    "heartbeat": {
+      "enabled": false
+    },
     "controlUi": {
       "dangerouslyAllowHostHeaderOriginFallback": true
     },
