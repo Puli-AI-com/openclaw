@@ -169,9 +169,11 @@ rootExports = new Proxy(target, {
   },
   ownKeys() {
     const keys = new Set(Reflect.ownKeys(target));
-    const monolithic = getMonolithicSdk();
-    if (monolithic) {
-      for (const key of Reflect.ownKeys(monolithic)) {
+    // Only merge monolithic keys when the SDK has already been loaded.
+    // Eagerly loading here would make Object.keys() trigger a slow jiti
+    // load on first call, which is inconsistent with the lazy-load contract.
+    if (monolithicSdk) {
+      for (const key of Reflect.ownKeys(monolithicSdk)) {
         if (!keys.has(key)) {
           keys.add(key);
         }
