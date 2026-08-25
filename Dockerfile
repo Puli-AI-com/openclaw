@@ -322,6 +322,7 @@ ENV NODE_ENV=production
 # ~/.openclaw/openclaw.json on first start when the EFS mount is empty.
 # ~/.openclaw/openclaw.json also exists for non-EFS (local/docker-compose) runs.
 COPY default-config/openclaw.json /app/default-config/openclaw.json
+COPY --chown=node:node scripts/reconcile-openclaw-config.mjs /app/scripts/reconcile-openclaw-config.mjs
 RUN mkdir -p /home/node/.openclaw && \
     cp /app/default-config/openclaw.json /home/node/.openclaw/openclaw.json && \
     chown -R node:node /home/node/.openclaw

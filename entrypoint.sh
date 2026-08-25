@@ -7,6 +7,8 @@
 # so a running deployment is not disrupted by unrelated restarts.
 set -e
 
+node /app/scripts/reconcile-openclaw-config.mjs
+
 WORKSPACE="/home/node/.openclaw/workspace"
 PROFILE="${BOT_PROFILE:-paula}"
 PROFILE_DIR="/app/profiles/${PROFILE}"
