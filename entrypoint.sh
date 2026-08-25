@@ -7,6 +7,9 @@
 # so a running deployment is not disrupted by unrelated restarts.
 set -e
 
+OPENCLAW_SOURCE_CONFIG_PATH="${OPENCLAW_CONFIG_PATH:-/home/node/.openclaw/openclaw.json}"
+OPENCLAW_CONFIG_PATH="${OPENCLAW_RUNTIME_CONFIG_PATH:-/home/node/.openclaw/.puli-runtime-openclaw.json}"
+export OPENCLAW_SOURCE_CONFIG_PATH OPENCLAW_CONFIG_PATH
 node /app/scripts/reconcile-openclaw-config.mjs
 
 WORKSPACE="/home/node/.openclaw/workspace"

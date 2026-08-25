@@ -9,6 +9,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/b
  && [ -e /usr/local/bin/uvx ] || ln -sf /usr/local/bin/uv /usr/local/bin/uvx
 
 COPY --chown=node:node entrypoint.sh /app/entrypoint.sh
+COPY --chown=node:node scripts/reconcile-openclaw-config.mjs /app/scripts/reconcile-openclaw-config.mjs
 RUN chmod +x /app/entrypoint.sh
 
 USER node

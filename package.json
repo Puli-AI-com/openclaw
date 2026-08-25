@@ -301,7 +301,7 @@
     "release:check": "node --import tsx scripts/release-check.ts",
     "release:openclaw:npm:check": "node --import tsx scripts/openclaw-npm-release-check.ts",
     "start": "node scripts/run-node.mjs",
-    "test": "node scripts/test-parallel.mjs",
+    "test": "node scripts/test-parallel.mjs && node --test scripts/reconcile-openclaw-config.test.mjs",
     "test:all": "pnpm lint && pnpm build && pnpm test && pnpm test:e2e && pnpm test:live && pnpm test:docker:all",
     "test:auth:compat": "vitest run --config vitest.gateway.config.ts src/gateway/server.auth.compat-baseline.test.ts src/gateway/client.test.ts src/gateway/reconnect-gating.test.ts src/gateway/protocol/connect-error-details.test.ts",
     "test:channels": "vitest run --config vitest.channels.config.ts",
