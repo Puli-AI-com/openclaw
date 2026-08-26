@@ -318,14 +318,14 @@ ENV NODE_ENV=production
 # Bake structural defaults into the image.
 # Secrets and dynamic values (API keys, endpoints) are injected at runtime via
 # environment variables using ${VAR_NAME} substitution in the config.
-# /app/default-config/openclaw.json is used as a seed: the entrypoint copies it to
-# ~/.openclaw/openclaw.json on first start when the EFS mount is empty.
-# ~/.openclaw/openclaw.json also exists for non-EFS (local/docker-compose) runs.
+# The entrypoint compiles these defaults with durable tenant overrides into an
+# ephemeral runtime config. Structural defaults are never copied onto EFS.
 COPY default-config/openclaw.json /app/default-config/openclaw.json
+COPY --chown=node:node scripts/config-state-separation.mjs /app/scripts/config-state-separation.mjs
+COPY --chown=node:node scripts/migrate-config-state-separation.mjs /app/scripts/migrate-config-state-separation.mjs
 COPY --chown=node:node scripts/reconcile-openclaw-config.mjs /app/scripts/reconcile-openclaw-config.mjs
-RUN mkdir -p /home/node/.openclaw && \
-    cp /app/default-config/openclaw.json /home/node/.openclaw/openclaw.json && \
-    chown -R node:node /home/node/.openclaw
+RUN mkdir -p /home/node/.openclaw /var/lib/puli/openclaw-state /tmp/puli-openclaw && \
+    chown -R node:node /home/node/.openclaw /var/lib/puli /tmp/puli-openclaw
 
 # Install uv for skill script execution (used by etoro_monitor and other skills).
 # Installed to /usr/local/bin so it is available system-wide regardless of user.
@@ -345,7 +345,7 @@ RUN chmod +x /app/entrypoint.sh
 # NOTE: /app/envoy-tools is created by the COPY commands below; it is no longer a
 # git clone of Puli-envoy-tools — skills/runner/packages all come from the monorepo.
 ENV RAMPUP_HOME=/app/envoy-tools/skills
-ENV RAMPUP_DATA_DIR=/home/node/.openclaw/workspace/applications
+ENV RAMPUP_DATA_DIR=/var/lib/puli/openclaw-state/workspace/applications
 ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/packages/screen_bundle/src
 ENV RUNNER_ROOT=/app/envoy-tools/runner
 COPY --from=shared_skills . /app/envoy-tools/skills/

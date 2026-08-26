@@ -11,37 +11,57 @@ const requiredHooks = {
   allowedAgentIds: ["paula"],
   defaultSessionKey: "hook:rampup:default",
   allowRequestSessionKey: true,
-  allowedSessionKeyPrefixes: ["hook:rampup:", "hook:appver:"],
+  allowedSessionKeyPrefixes: ["hook:rampup:", "hook:jobs:", "hook:appctx:", "hook:appver:"],
 };
 
-const defaults = `${JSON.stringify({
-  gateway: { heartbeat: { enabled: false } },
+const defaultsObject = {
+  gateway: {
+    heartbeat: { enabled: false },
+    controlUi: { dangerouslyAllowHostHeaderOriginFallback: true },
+    http: { endpoints: { chatCompletions: { enabled: true } } },
+  },
   hooks: requiredHooks,
   channels: { telegram: { groupPolicy: "open" } },
-})}\n`;
+  agents: {
+    defaults: { model: { primary: "litellm/claude-sonnet-4-6" } },
+    list: [{ id: "paula", default: true }],
+  },
+  skills: { load: { extraDirs: ["/app/envoy-tools/skills"] } },
+};
+const defaults = `${JSON.stringify(defaultsObject)}\n`;
 
-async function fixture(t, { source, defaultContents = defaults, runtime } = {}) {
+async function fixture(t, { overrides = "{}\n", defaultContents = defaults, runtime } = {}) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-runtime-config-"));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
-  const sourceConfigPath = path.join(directory, "state", "openclaw.json");
-  const runtimeConfigPath = path.join(directory, "state", ".puli-runtime-openclaw.json");
+  const stateDir = path.join(directory, "state");
+  const tenantOverridesPath = path.join(stateDir, "tenant-overrides.json");
+  const runtimeConfigPath = path.join(directory, "runtime", "openclaw.json");
   const defaultConfigPath = path.join(directory, "default.json");
+  await fs.mkdir(stateDir, { recursive: true });
+  await fs.writeFile(tenantOverridesPath, overrides);
   await fs.writeFile(defaultConfigPath, defaultContents);
-  if (source !== undefined) {
-    await fs.mkdir(path.dirname(sourceConfigPath), { recursive: true });
-    await fs.writeFile(sourceConfigPath, source);
-  }
   if (runtime !== undefined) {
     await fs.mkdir(path.dirname(runtimeConfigPath), { recursive: true });
     await fs.writeFile(runtimeConfigPath, runtime);
   }
-  return { sourceConfigPath, runtimeConfigPath, defaultConfigPath, directory };
+  return {
+    tenantOverridesPath,
+    runtimeConfigPath,
+    defaultConfigPath,
+    directory,
+    env: {
+      OPENCLAW_STATE_DIR: stateDir,
+      OPENCLAW_PERSIST_CONFIG_PATH: tenantOverridesPath,
+      OPENCLAW_RUNTIME_CONFIG_PATH: runtimeConfigPath,
+      OPENCLAW_DEFAULT_CONFIG_PATH: defaultConfigPath,
+    },
+  };
 }
 
 async function runtimeArtifacts(runtimeConfigPath) {
   try {
     return (await fs.readdir(path.dirname(runtimeConfigPath))).filter((name) =>
-      name.startsWith(".puli-runtime-openclaw.json"),
+      name.startsWith("openclaw.json"),
     );
   } catch (error) {
     if (error?.code === "ENOENT") {
@@ -51,120 +71,138 @@ async function runtimeArtifacts(runtimeConfigPath) {
   }
 }
 
-void test("creates an overlay without reading or changing persisted JSON5", async (t) => {
-  const source = `{
-    // Comments, trailing commas, and unsafe integer literals must remain exact.
-    tenantId: 900719925474099312345,
-    gateway: { custom: true, },
-    hooks: { customHookOption: 'preserve-me' },
+void test("compiles defaults and explicit tenant overrides into a complete config", async (t) => {
+  const overrides = `{
+    // JSON5 tenant choices remain supported.
+    channels: { telegram: { groupPolicy: 'allowlist', }, },
+    agents: { defaults: { model: { primary: 'tenant/model' } } },
   }\n`;
-  const paths = await fixture(t, { source });
+  const paths = await fixture(t, { overrides });
 
   const result = await createOpenClawRuntimeConfig(paths);
-  const overlay = JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8"));
+  const runtime = JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8"));
 
-  assert.equal(result.status, "overlay-created");
-  assert.equal(await fs.readFile(paths.sourceConfigPath, "utf8"), source);
-  assert.deepEqual(overlay, {
-    $include: paths.sourceConfigPath,
-    hooks: requiredHooks,
+  assert.equal(result.status, "effective-config-created");
+  assert.equal(runtime.channels.telegram.groupPolicy, "allowlist");
+  assert.equal(runtime.agents.defaults.model.primary, "tenant/model");
+  assert.deepEqual(runtime.agents.list, [{ id: "paula", default: true }]);
+  assert.deepEqual(runtime.hooks, requiredHooks);
+  assert.equal(await fs.readFile(paths.tenantOverridesPath, "utf8"), overrides);
+  assert.deepEqual(await runtimeArtifacts(paths.runtimeConfigPath), ["openclaw.json"]);
+});
+
+void test("protected tenant paths cannot override image-owned structure", async (t) => {
+  const paths = await fixture(t, {
+    overrides: JSON.stringify({
+      hooks: { enabled: false, allowedAgentIds: [] },
+      agents: { list: [{ id: "other", default: true }] },
+      skills: { load: { extraDirs: ["/tenant/path"] } },
+      gateway: {
+        heartbeat: { enabled: true },
+        controlUi: { dangerouslyAllowHostHeaderOriginFallback: false },
+      },
+    }),
   });
-  assert.deepEqual(await runtimeArtifacts(paths.runtimeConfigPath), [
-    ".puli-runtime-openclaw.json",
-  ]);
-});
-
-void test("never changes malformed persisted data", async (t) => {
-  const source = '{"gateway":{"token":"keep-me"},"hooks":';
-  const paths = await fixture(t, { source });
 
   await createOpenClawRuntimeConfig(paths);
+  const runtime = JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8"));
 
-  assert.equal(await fs.readFile(paths.sourceConfigPath, "utf8"), source);
-  assert.equal(
-    JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8")).$include,
-    paths.sourceConfigPath,
-  );
+  assert.equal(runtime.hooks.enabled, true);
+  assert.deepEqual(runtime.hooks.allowedAgentIds, ["paula"]);
+  assert.deepEqual(runtime.agents.list, [{ id: "paula", default: true }]);
+  assert.deepEqual(runtime.skills.load.extraDirs, ["/app/envoy-tools/skills"]);
+  assert.equal(runtime.gateway.heartbeat.enabled, false);
+  assert.equal(runtime.gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback, true);
 });
 
-void test("uses complete defaults when no persisted config exists", async (t) => {
-  const paths = await fixture(t);
+void test("materializes a rollback-compatible legacy config when configured", async (t) => {
+  const paths = await fixture(t, {
+    overrides: '{"channels":{"telegram":{"groupPolicy":"allowlist"}}}\n',
+  });
+  const compatibilityConfigPath = path.join(paths.directory, "state", "openclaw.json");
 
-  const result = await createOpenClawRuntimeConfig(paths);
+  await createOpenClawRuntimeConfig({
+    ...paths,
+    compatibilityConfigPath,
+  });
 
-  assert.equal(result.status, "defaults-created");
-  assert.deepEqual(
-    JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8")),
-    JSON.parse(defaults),
-  );
+  const runtime = JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8"));
+  const compatibility = JSON.parse(await fs.readFile(compatibilityConfigPath, "utf8"));
+  assert.deepEqual(compatibility, runtime);
+  assert.equal(compatibility.channels.telegram.groupPolicy, "allowlist");
+  assert.deepEqual(compatibility.agents.list, [{ id: "paula", default: true }]);
 });
 
-void test("allows a symlinked persisted config without replacing it or its target", async (t) => {
-  const paths = await fixture(t);
-  const targetPath = path.join(paths.directory, "tenant-config.json5");
-  const source = "{ tenantOnly: 'keep-me' }\n";
-  await fs.writeFile(targetPath, source);
-  await fs.mkdir(path.dirname(paths.sourceConfigPath), { recursive: true });
-  await fs.symlink(targetPath, paths.sourceConfigPath);
+void test("malformed overrides fail without replacing the previous runtime config", async (t) => {
+  const previousRuntime = '{"runtimeOnly":"previous"}\n';
+  const paths = await fixture(t, {
+    overrides: '{"channels":',
+    runtime: previousRuntime,
+  });
 
-  await createOpenClawRuntimeConfig(paths);
-
-  assert.equal((await fs.lstat(paths.sourceConfigPath)).isSymbolicLink(), true);
-  assert.equal(await fs.readFile(targetPath, "utf8"), source);
+  await assert.rejects(createOpenClawRuntimeConfig(paths), /tenant overrides is not valid JSON5/);
+  assert.equal(await fs.readFile(paths.runtimeConfigPath, "utf8"), previousRuntime);
 });
 
-void test("refuses malformed defaults without touching persisted data", async (t) => {
-  const source = '{"tenantOnly":"keep-me"}\n';
-  const paths = await fixture(t, { source, defaultContents: '{"hooks":' });
+void test("missing or malformed defaults fail before publishing runtime config", async (t) => {
+  const paths = await fixture(t, { defaultContents: '{"hooks":' });
 
   await assert.rejects(
     createOpenClawRuntimeConfig(paths),
-    /default OpenClaw config is not valid JSON/,
+    /default OpenClaw config is not valid JSON5/,
   );
-
-  assert.equal(await fs.readFile(paths.sourceConfigPath, "utf8"), source);
   assert.deepEqual(await runtimeArtifacts(paths.runtimeConfigPath), []);
 });
 
 void test("refuses to use the persisted path as the runtime destination", async (t) => {
-  const source = '{"tenantOnly":"keep-me"}\n';
-  const paths = await fixture(t, { source });
+  const paths = await fixture(t);
 
   await assert.rejects(
     createOpenClawRuntimeConfig({
       ...paths,
-      runtimeConfigPath: paths.sourceConfigPath,
+      runtimeConfigPath: paths.tenantOverridesPath,
     }),
-    /must not replace the persisted config/,
+    /must not replace tenant overrides/,
   );
-
-  assert.equal(await fs.readFile(paths.sourceConfigPath, "utf8"), source);
+  assert.equal(await fs.readFile(paths.tenantOverridesPath, "utf8"), "{}\n");
 });
 
-void test("a concurrent persisted write remains intact and visible through the overlay", async (t) => {
-  const source = '{"tenantOnly":"original"}\n';
-  const concurrent = `{
-    tenantOnly: 'written-concurrently',
-    unsafeId: 900719925474099312345,
-  }\n`;
-  const paths = await fixture(t, { source });
+void test("a concurrent override write is preserved", async (t) => {
+  const paths = await fixture(t, {
+    overrides: '{"channels":{"telegram":{"groupPolicy":"open"}}}\n',
+  });
+  const concurrent = '{"channels":{"telegram":{"groupPolicy":"disabled"}}}\n';
 
   await createOpenClawRuntimeConfig({
     ...paths,
-    beforePublish: () => fs.writeFile(paths.sourceConfigPath, concurrent),
+    beforePublish: () => fs.writeFile(paths.tenantOverridesPath, concurrent),
   });
 
-  assert.equal(await fs.readFile(paths.sourceConfigPath, "utf8"), concurrent);
-  assert.equal(
-    JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8")).$include,
-    paths.sourceConfigPath,
-  );
+  assert.equal(await fs.readFile(paths.tenantOverridesPath, "utf8"), concurrent);
 });
 
-void test("a failed runtime rename leaves persisted and previous runtime data intact", async (t) => {
-  const source = '{"tenantOnly":"keep-me"}\n';
+void test("waits for managed override writes before reading configuration", async (t) => {
+  const paths = await fixture(t, {
+    overrides: '{"channels":{"telegram":{"groupPolicy":"open"}}}\n',
+  });
+  const lockPath = `${paths.tenantOverridesPath}.lock`;
+  await fs.writeFile(lockPath, "other-process\n");
+  const reconcile = createOpenClawRuntimeConfig(paths);
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  await fs.writeFile(
+    paths.tenantOverridesPath,
+    '{"channels":{"telegram":{"groupPolicy":"disabled"}}}\n',
+  );
+  await fs.unlink(lockPath);
+
+  await reconcile;
+  const runtime = JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8"));
+  assert.equal(runtime.channels.telegram.groupPolicy, "disabled");
+});
+
+void test("a failed runtime rename preserves overrides and previous runtime config", async (t) => {
   const runtime = '{"runtimeOnly":"previous"}\n';
-  const paths = await fixture(t, { source, runtime });
+  const paths = await fixture(t, { runtime });
   const failedFileSystem = {
     ...fs,
     rename: async () => {
@@ -176,50 +214,15 @@ void test("a failed runtime rename leaves persisted and previous runtime data in
     createOpenClawRuntimeConfig({ ...paths, fileSystem: failedFileSystem }),
     /simulated rename failure/,
   );
-
-  assert.equal(await fs.readFile(paths.sourceConfigPath, "utf8"), source);
+  assert.equal(await fs.readFile(paths.tenantOverridesPath, "utf8"), "{}\n");
   assert.equal(await fs.readFile(paths.runtimeConfigPath, "utf8"), runtime);
-  assert.deepEqual(await runtimeArtifacts(paths.runtimeConfigPath), [
-    ".puli-runtime-openclaw.json",
-  ]);
+  assert.deepEqual(await runtimeArtifacts(paths.runtimeConfigPath), ["openclaw.json"]);
 });
 
-void test("a failed temporary write cannot change persisted data", async (t) => {
-  const source = '{"tenantOnly":"keep-me"}\n';
-  const paths = await fixture(t, { source });
-  const failedFileSystem = {
-    ...fs,
-    open: async (filePath, ...args) => {
-      if (String(filePath).includes(".tmp-")) {
-        const error = new Error("simulated disk-full failure");
-        error.code = "ENOSPC";
-        throw error;
-      }
-      return fs.open(filePath, ...args);
-    },
-  };
-
-  await assert.rejects(
-    createOpenClawRuntimeConfig({ ...paths, fileSystem: failedFileSystem }),
-    /simulated disk-full failure/,
-  );
-
-  assert.equal(await fs.readFile(paths.sourceConfigPath, "utf8"), source);
-  assert.deepEqual(await runtimeArtifacts(paths.runtimeConfigPath), []);
-});
-
-void test("runtime permissions stay private even under a restrictive umask", async (t) => {
-  const source = '{"tenantOnly":"keep-me"}\n';
-  const paths = await fixture(t, { source });
-  await fs.chmod(path.dirname(paths.runtimeConfigPath), 0o750);
-  const previousUmask = process.umask(0o777);
-  try {
-    await createOpenClawRuntimeConfig(paths);
-  } finally {
-    process.umask(previousUmask);
-  }
+void test("runtime config permissions remain private", async (t) => {
+  const paths = await fixture(t);
+  await createOpenClawRuntimeConfig(paths);
 
   assert.equal((await fs.stat(paths.runtimeConfigPath)).mode & 0o777, 0o600);
-  assert.equal((await fs.stat(path.dirname(paths.runtimeConfigPath))).mode & 0o777, 0o750);
-  assert.equal(await fs.readFile(paths.sourceConfigPath, "utf8"), source);
+  assert.equal(await fs.readFile(paths.tenantOverridesPath, "utf8"), "{}\n");
 });

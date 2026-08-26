@@ -6,6 +6,7 @@ import {
   resolveDefaultConfigCandidates,
   resolveConfigPathCandidate,
   resolveConfigPath,
+  resolvePersistConfigPath,
   resolveOAuthDir,
   resolveOAuthPath,
   resolveStateDir,
@@ -148,5 +149,24 @@ describe("state + config path candidates", () => {
       const resolved = resolveConfigPath(env, overrideDir, () => root);
       expect(resolved).toBe(path.join(overrideDir, "openclaw.json"));
     });
+  });
+
+  it("uses an explicit persistent config path for generated runtime configs", () => {
+    const env = {
+      OPENCLAW_STATE_DIR: "/var/lib/puli/openclaw-state",
+      OPENCLAW_CONFIG_PATH: "/tmp/puli-openclaw/openclaw.json",
+      OPENCLAW_PERSIST_CONFIG_PATH: "/var/lib/puli/openclaw-state/tenant-overrides.json",
+    } as NodeJS.ProcessEnv;
+
+    expect(resolvePersistConfigPath(env)).toBe(
+      "/var/lib/puli/openclaw-state/tenant-overrides.json",
+    );
+  });
+
+  it("defaults persistent writes to the active config path", () => {
+    const activePath = "/tmp/openclaw.json";
+    expect(resolvePersistConfigPath({} as NodeJS.ProcessEnv, "/state", activePath)).toBe(
+      activePath,
+    );
   });
 });

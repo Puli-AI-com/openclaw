@@ -5,6 +5,7 @@ import { withTempHome } from "./home-env.test-harness.js";
 import {
   clearConfigCache,
   clearRuntimeConfigSnapshot,
+  createConfigIO,
   getRuntimeConfigSourceSnapshot,
   loadConfig,
   projectConfigOntoRuntimeSourceSnapshot,
@@ -249,6 +250,123 @@ describe("runtime config snapshot writes", () => {
         await writePromise;
       } finally {
         resetRuntimeConfigState();
+      }
+    });
+  });
+
+  it("writes generated runtime changes to the persistent override path", async () => {
+    await withTempHome("openclaw-config-split-write-", async (home) => {
+      const stateDir = path.join(home, "state");
+      const runtimePath = path.join(home, "runtime", "openclaw.json");
+      const persistPath = path.join(stateDir, "tenant-overrides.json");
+      const previousEnv = {
+        config: process.env.OPENCLAW_CONFIG_PATH,
+        compatibility: process.env.OPENCLAW_COMPAT_CONFIG_PATH,
+        persist: process.env.OPENCLAW_PERSIST_CONFIG_PATH,
+        state: process.env.OPENCLAW_STATE_DIR,
+        unset: process.env.OPENCLAW_PERSIST_CONFIG_UNSET_PATHS,
+      };
+      const sourceConfig = createSourceConfig();
+      const compatibilityPath = path.join(stateDir, "openclaw.json");
+      const runtimeConfig: OpenClawConfig = {
+        ...createRuntimeConfig(),
+        hooks: {
+          enabled: true,
+          allowedAgentIds: ["paula"],
+        },
+        agents: {
+          list: [{ id: "paula", default: true }],
+        },
+      };
+      const nextRuntimeConfig: OpenClawConfig = {
+        ...runtimeConfig,
+        gateway: { auth: { mode: "token" } },
+      };
+      const runtimeFileConfig: OpenClawConfig = {
+        ...sourceConfig,
+        hooks: runtimeConfig.hooks,
+        agents: runtimeConfig.agents,
+      };
+
+      await fs.mkdir(path.dirname(runtimePath), { recursive: true });
+      await fs.mkdir(path.dirname(persistPath), { recursive: true });
+      await fs.writeFile(runtimePath, `${JSON.stringify(runtimeFileConfig, null, 2)}\n`);
+      await fs.writeFile(persistPath, `${JSON.stringify(sourceConfig, null, 2)}\n`);
+      await fs.writeFile(compatibilityPath, "{}\n");
+      process.env.OPENCLAW_CONFIG_PATH = runtimePath;
+      process.env.OPENCLAW_COMPAT_CONFIG_PATH = compatibilityPath;
+      process.env.OPENCLAW_PERSIST_CONFIG_PATH = persistPath;
+      process.env.OPENCLAW_STATE_DIR = stateDir;
+      process.env.OPENCLAW_PERSIST_CONFIG_UNSET_PATHS = "hooks,agents.list";
+
+      try {
+        setRuntimeConfigSnapshot(runtimeConfig, sourceConfig);
+        await writeConfigFile(nextRuntimeConfig);
+
+        const persisted = JSON.parse(await fs.readFile(persistPath, "utf8")) as OpenClawConfig;
+        expect(persisted.gateway?.auth).toEqual({ mode: "token" });
+        expect(persisted.hooks).toBeUndefined();
+        expect(persisted.agents?.list).toBeUndefined();
+        expect(JSON.parse(await fs.readFile(runtimePath, "utf8"))).toEqual(runtimeFileConfig);
+        expect(loadConfig().gateway?.auth).toEqual({ mode: "token" });
+        const compatibility = JSON.parse(
+          await fs.readFile(compatibilityPath, "utf8"),
+        ) as OpenClawConfig;
+        expect(compatibility.gateway?.auth).toEqual({ mode: "token" });
+        expect(compatibility.hooks?.enabled).toBe(true);
+        expect(compatibility.models?.providers?.openai?.apiKey).toEqual({
+          source: "env",
+          provider: "default",
+          id: "OPENAI_API_KEY",
+        });
+
+        const directIo = createConfigIO();
+        await directIo.writeConfigFile({
+          ...loadConfig(),
+          agents: {
+            ...loadConfig().agents,
+            defaults: { maxConcurrent: 2 },
+          },
+        });
+        const persistedAfterDirectWrite = JSON.parse(
+          await fs.readFile(persistPath, "utf8"),
+        ) as OpenClawConfig;
+        expect(persistedAfterDirectWrite.agents?.defaults?.maxConcurrent).toBe(2);
+        expect(persistedAfterDirectWrite.agents?.list).toBeUndefined();
+
+        await expect(
+          writeConfigFile({
+            ...nextRuntimeConfig,
+            hooks: { ...runtimeConfig.hooks, enabled: false },
+          }),
+        ).rejects.toThrow("Config path is image-managed and cannot be changed: hooks");
+      } finally {
+        resetRuntimeConfigState();
+        if (previousEnv.config === undefined) {
+          delete process.env.OPENCLAW_CONFIG_PATH;
+        } else {
+          process.env.OPENCLAW_CONFIG_PATH = previousEnv.config;
+        }
+        if (previousEnv.compatibility === undefined) {
+          delete process.env.OPENCLAW_COMPAT_CONFIG_PATH;
+        } else {
+          process.env.OPENCLAW_COMPAT_CONFIG_PATH = previousEnv.compatibility;
+        }
+        if (previousEnv.persist === undefined) {
+          delete process.env.OPENCLAW_PERSIST_CONFIG_PATH;
+        } else {
+          process.env.OPENCLAW_PERSIST_CONFIG_PATH = previousEnv.persist;
+        }
+        if (previousEnv.state === undefined) {
+          delete process.env.OPENCLAW_STATE_DIR;
+        } else {
+          process.env.OPENCLAW_STATE_DIR = previousEnv.state;
+        }
+        if (previousEnv.unset === undefined) {
+          delete process.env.OPENCLAW_PERSIST_CONFIG_UNSET_PATHS;
+        } else {
+          process.env.OPENCLAW_PERSIST_CONFIG_UNSET_PATHS = previousEnv.unset;
+        }
       }
     });
   });

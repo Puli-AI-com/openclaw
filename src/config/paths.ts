@@ -191,6 +191,22 @@ export function resolveConfigPath(
   return path.join(stateDir, CONFIG_FILENAME);
 }
 
+/**
+ * Config path used for durable writes when the active config is generated.
+ * Defaults to the active config path for backward compatibility.
+ */
+export function resolvePersistConfigPath(
+  env: NodeJS.ProcessEnv = process.env,
+  stateDir: string = resolveStateDir(env, envHomedir(env)),
+  activeConfigPath: string = resolveConfigPath(env, stateDir, envHomedir(env)),
+): string {
+  const override = env.OPENCLAW_PERSIST_CONFIG_PATH?.trim();
+  if (override) {
+    return resolveUserPath(override, env, envHomedir(env));
+  }
+  return activeConfigPath;
+}
+
 export const CONFIG_PATH = resolveConfigPathCandidate();
 
 /**
