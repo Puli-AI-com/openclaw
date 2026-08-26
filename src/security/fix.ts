@@ -400,7 +400,10 @@ export async function fixSecurityFootguns(opts?: {
   const actions: SecurityFixAction[] = [];
   const errors: string[] = [];
 
-  const io = createConfigIO({ env, configPath });
+  const io = createConfigIO({
+    env,
+    ...(opts?.configPath ? { configPath } : {}),
+  });
   const snap = await io.readConfigFileSnapshot();
   if (!snap.valid) {
     errors.push(...snap.issues.map((i) => `${i.path}: ${i.message}`));

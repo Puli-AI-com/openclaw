@@ -45,7 +45,12 @@ import { findLegacyConfigIssues } from "./legacy.js";
 import { applyMergePatch } from "./merge-patch.js";
 import { normalizeExecSafeBinProfilesInConfig } from "./normalize-exec-safe-bin.js";
 import { normalizeConfigPaths } from "./normalize-paths.js";
-import { resolveConfigPath, resolveDefaultConfigCandidates, resolveStateDir } from "./paths.js";
+import {
+  resolveConfigPath,
+  resolveDefaultConfigCandidates,
+  resolvePersistConfigPath,
+  resolveStateDir,
+} from "./paths.js";
 import { isBlockedObjectKey } from "./prototype-keys.js";
 import { applyConfigOverrides } from "./runtime-overrides.js";
 import type { OpenClawConfig, ConfigFileSnapshot, LegacyConfigIssue } from "./types.js";
@@ -730,6 +735,9 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
     : resolveDefaultConfigCandidates(deps.env, deps.homedir);
   const configPath =
     candidatePaths.find((candidate) => deps.fs.existsSync(candidate)) ?? requestedConfigPath;
+  const persistConfigPath = deps.configPath
+    ? configPath
+    : resolvePersistConfigPath(deps.env, resolveStateDir(deps.env, deps.homedir), configPath);
 
   function loadConfig(): OpenClawConfig {
     try {
@@ -1084,6 +1092,74 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
   }
 
   async function writeConfigFile(cfg: OpenClawConfig, options: ConfigWriteOptions = {}) {
+    if (path.resolve(persistConfigPath) !== path.resolve(configPath)) {
+      const requestedRuntimeSnapshot = runtimeConfigSnapshot;
+      const releasePersistLock = await acquirePersistConfigWriteLock(persistConfigPath);
+      try {
+        if (
+          requestedRuntimeSnapshot &&
+          runtimeConfigSnapshot &&
+          requestedRuntimeSnapshot !== runtimeConfigSnapshot
+        ) {
+          throw new Error("Runtime config changed while waiting for the persistent write lock");
+        }
+        const activeSnapshot = await readConfigFileSnapshotInternal();
+        if (!activeSnapshot.snapshot.valid) {
+          throw new Error(`Generated runtime config is invalid: ${configPath}`);
+        }
+        const persistIo = createConfigIO({
+          fs: deps.fs,
+          json5: deps.json5,
+          env: deps.env,
+          homedir: deps.homedir,
+          configPath: persistConfigPath,
+          logger: deps.logger,
+        });
+        const persistSnapshot = await persistIo.readConfigFileSnapshot();
+        if (!persistSnapshot.valid || !isWritePlainObject(persistSnapshot.parsed)) {
+          throw new Error(`Persistent config is invalid: ${persistConfigPath}`);
+        }
+        const runtimeBaseline = runtimeConfigSnapshot ?? activeSnapshot.snapshot.config;
+        const configuredUnsetPaths = resolveConfiguredPersistUnsetPaths(deps.env);
+        assertManagedConfigPathsUnchanged(cfg, runtimeBaseline, configuredUnsetPaths);
+        const runtimePatch = createMergePatch(runtimeBaseline, cfg);
+        let nextCfg = coerceConfig(applyMergePatch(persistSnapshot.parsed, runtimePatch));
+        for (const unsetPath of configuredUnsetPaths) {
+          nextCfg = unsetPathForWrite(nextCfg, unsetPath).next;
+        }
+        await persistIo.writeConfigFile(nextCfg, {
+          unsetPaths: [...(options.unsetPaths ?? []), ...configuredUnsetPaths],
+        });
+
+        const compatibilityPath = deps.env.OPENCLAW_COMPAT_CONFIG_PATH?.trim();
+        if (compatibilityPath) {
+          if (!isWritePlainObject(activeSnapshot.snapshot.parsed)) {
+            throw new Error(
+              `Cannot materialize compatibility config from invalid runtime config: ${configPath}`,
+            );
+          }
+          const compatibilityConfig = coerceConfig(
+            applyMergePatch(activeSnapshot.snapshot.parsed, runtimePatch),
+          );
+          await createConfigIO({
+            fs: deps.fs,
+            json5: deps.json5,
+            env: deps.env,
+            homedir: deps.homedir,
+            configPath: compatibilityPath,
+            logger: deps.logger,
+          }).writeConfigFile(compatibilityConfig);
+        }
+        if (runtimeConfigSnapshot) {
+          setRuntimeConfigSnapshot(cfg, nextCfg);
+        } else {
+          clearConfigCache();
+        }
+        return;
+      } finally {
+        await releasePersistLock();
+      }
+    }
     clearConfigCache();
     let persistCandidate: unknown = cfg;
     const { snapshot } = await readConfigFileSnapshotInternal();
@@ -1504,11 +1580,84 @@ export async function readConfigFileSnapshotForWrite(): Promise<ReadConfigFileSn
   return await createConfigIO().readConfigFileSnapshotForWrite();
 }
 
+function resolveConfiguredPersistUnsetPaths(env: NodeJS.ProcessEnv): string[][] {
+  return (env.OPENCLAW_PERSIST_CONFIG_UNSET_PATHS ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) =>
+      entry
+        .split(".")
+        .map((segment) => segment.trim())
+        .filter(Boolean),
+    )
+    .filter((segments) => segments.length > 0);
+}
+
+function readConfigPathValue(config: OpenClawConfig, pathSegments: string[]): unknown {
+  let current: unknown = config;
+  for (const segment of pathSegments) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+function assertManagedConfigPathsUnchanged(
+  candidate: OpenClawConfig,
+  baseline: OpenClawConfig,
+  managedPaths: string[][],
+): void {
+  for (const managedPath of managedPaths) {
+    if (
+      !isDeepStrictEqual(
+        readConfigPathValue(candidate, managedPath),
+        readConfigPathValue(baseline, managedPath),
+      )
+    ) {
+      throw new Error(
+        `Config path is image-managed and cannot be changed: ${managedPath.join(".")}`,
+      );
+    }
+  }
+}
+
+async function acquirePersistConfigWriteLock(persistPath: string): Promise<() => Promise<void>> {
+  const lockPath = `${persistPath}.lock`;
+  await fs.promises.mkdir(path.dirname(lockPath), { recursive: true, mode: 0o700 });
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    try {
+      const handle = await fs.promises.open(lockPath, "wx", 0o600);
+      await handle.writeFile(`${process.pid}\n`);
+      await handle.close();
+      return async () => {
+        await fs.promises.unlink(lockPath).catch(() => {});
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw new Error(`Timed out waiting for persistent config write lock: ${lockPath}`);
+}
+
 export async function writeConfigFile(
   cfg: OpenClawConfig,
   options: ConfigWriteOptions = {},
 ): Promise<void> {
   const io = createConfigIO();
+  const stateDir = resolveStateDir(process.env);
+  const persistPath = resolvePersistConfigPath(process.env, stateDir, io.configPath);
+  const splitPersistPath = path.resolve(persistPath) !== path.resolve(io.configPath);
+  if (splitPersistPath) {
+    await io.writeConfigFile(cfg, options);
+    return;
+  }
+
   let nextCfg = cfg;
   const hadRuntimeSnapshot = Boolean(runtimeConfigSnapshot);
   const hadBothSnapshots = Boolean(runtimeConfigSnapshot && runtimeConfigSourceSnapshot);

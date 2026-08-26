@@ -7,7 +7,30 @@
 # so a running deployment is not disrupted by unrelated restarts.
 set -e
 
-WORKSPACE="/home/node/.openclaw/workspace"
+if [ -z "${OPENCLAW_STATE_DIR:-}" ] && [ -f "/home/node/.openclaw/openclaw.json" ]; then
+    # Compatibility with the pre-separation ECS and local compose mount.
+    OPENCLAW_STATE_DIR="/home/node/.openclaw"
+else
+    OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-/var/lib/puli/openclaw-state}"
+fi
+OPENCLAW_PERSIST_CONFIG_PATH="${OPENCLAW_PERSIST_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/tenant-overrides.json}"
+OPENCLAW_LEGACY_CONFIG_PATH="${OPENCLAW_LEGACY_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/openclaw.json}"
+OPENCLAW_RUNTIME_CONFIG_PATH="${OPENCLAW_RUNTIME_CONFIG_PATH:-/tmp/puli-openclaw/openclaw.json}"
+OPENCLAW_CONFIG_PATH="${OPENCLAW_RUNTIME_CONFIG_PATH}"
+OPENCLAW_PERSIST_CONFIG_UNSET_PATHS="${OPENCLAW_PERSIST_CONFIG_UNSET_PATHS:-hooks,agents.list,skills.load.extraDirs,gateway.heartbeat,gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback,gateway.http.endpoints.chatCompletions}"
+if [ "${OPENCLAW_ENABLE_LEGACY_CONFIG_COMPAT:-0}" = "1" ]; then
+    OPENCLAW_COMPAT_CONFIG_PATH="${OPENCLAW_COMPAT_CONFIG_PATH:-${OPENCLAW_LEGACY_CONFIG_PATH}}"
+    export OPENCLAW_COMPAT_CONFIG_PATH
+fi
+export OPENCLAW_STATE_DIR OPENCLAW_PERSIST_CONFIG_PATH OPENCLAW_LEGACY_CONFIG_PATH
+export OPENCLAW_RUNTIME_CONFIG_PATH OPENCLAW_CONFIG_PATH OPENCLAW_PERSIST_CONFIG_UNSET_PATHS
+
+node /app/scripts/migrate-config-state-separation.mjs
+node /app/scripts/reconcile-openclaw-config.mjs
+
+WORKSPACE="${OPENCLAW_STATE_DIR}/workspace"
+RAMPUP_DATA_DIR="${OPENCLAW_RAMPUP_DATA_DIR:-${WORKSPACE}/applications}"
+export RAMPUP_DATA_DIR
 PROFILE="${BOT_PROFILE:-paula}"
 PROFILE_DIR="/app/profiles/${PROFILE}"
 
