@@ -7,7 +7,12 @@
 # so a running deployment is not disrupted by unrelated restarts.
 set -e
 
-OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-/var/lib/puli/openclaw-state}"
+if [ -z "${OPENCLAW_STATE_DIR:-}" ] && [ -f "/home/node/.openclaw/openclaw.json" ]; then
+    # Compatibility with the pre-separation ECS and local compose mount.
+    OPENCLAW_STATE_DIR="/home/node/.openclaw"
+else
+    OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-/var/lib/puli/openclaw-state}"
+fi
 OPENCLAW_PERSIST_CONFIG_PATH="${OPENCLAW_PERSIST_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/tenant-overrides.json}"
 OPENCLAW_LEGACY_CONFIG_PATH="${OPENCLAW_LEGACY_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/openclaw.json}"
 OPENCLAW_RUNTIME_CONFIG_PATH="${OPENCLAW_RUNTIME_CONFIG_PATH:-/tmp/puli-openclaw/openclaw.json}"
