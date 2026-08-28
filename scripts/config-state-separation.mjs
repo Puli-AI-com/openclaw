@@ -12,7 +12,9 @@ const PROTECTED_PATHS = [
   ["meta"],
   ["hooks"],
   ["agents", "list"],
+  ["agents", "defaults", "heartbeat"],
   ["skills", "load", "extraDirs"],
+  // Strip the invalid legacy path written by the v1 compatibility config.
   ["gateway", "heartbeat"],
   ["gateway", "controlUi", "dangerouslyAllowHostHeaderOriginFallback"],
   ["gateway", "http", "endpoints", "chatCompletions"],

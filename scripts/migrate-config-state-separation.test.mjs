@@ -11,14 +11,16 @@ import {
 
 const defaultsObject = {
   gateway: {
-    heartbeat: { enabled: false },
     controlUi: { dangerouslyAllowHostHeaderOriginFallback: true },
     http: { endpoints: { chatCompletions: { enabled: true } } },
   },
   hooks: { enabled: true, allowedAgentIds: ["paula"] },
   channels: { telegram: { groupPolicy: "open" } },
   agents: {
-    defaults: { model: { primary: "litellm/claude-sonnet-4-6" } },
+    defaults: {
+      model: { primary: "litellm/claude-sonnet-4-6" },
+      heartbeat: { every: "0m" },
+    },
     list: [{ id: "paula", default: true }],
   },
   skills: { load: { extraDirs: ["/app/envoy-tools/skills"] } },
@@ -61,7 +63,10 @@ void test("migrates legacy differences while preserving legacy bytes", async (t)
     hooks: { enabled: false },
     channels: { telegram: { groupPolicy: 'allowlist' } },
     agents: {
-      defaults: { model: { primary: 'tenant/model' } },
+      defaults: {
+        model: { primary: 'tenant/model' },
+        heartbeat: { every: '30m' },
+      },
       list: [{ id: 'other', default: true }],
     },
     skills: { load: { extraDirs: ['/tenant/skills'] } },
