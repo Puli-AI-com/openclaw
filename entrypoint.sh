@@ -17,7 +17,7 @@ OPENCLAW_PERSIST_CONFIG_PATH="${OPENCLAW_PERSIST_CONFIG_PATH:-${OPENCLAW_STATE_D
 OPENCLAW_LEGACY_CONFIG_PATH="${OPENCLAW_LEGACY_CONFIG_PATH:-${OPENCLAW_STATE_DIR}/openclaw.json}"
 OPENCLAW_RUNTIME_CONFIG_PATH="${OPENCLAW_RUNTIME_CONFIG_PATH:-/tmp/puli-openclaw/openclaw.json}"
 OPENCLAW_CONFIG_PATH="${OPENCLAW_RUNTIME_CONFIG_PATH}"
-OPENCLAW_PERSIST_CONFIG_UNSET_PATHS="${OPENCLAW_PERSIST_CONFIG_UNSET_PATHS:-hooks,agents.list,skills.load.extraDirs,gateway.heartbeat,gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback,gateway.http.endpoints.chatCompletions}"
+OPENCLAW_PERSIST_CONFIG_UNSET_PATHS="${OPENCLAW_PERSIST_CONFIG_UNSET_PATHS:-hooks,agents.list,agents.defaults.heartbeat,skills.load.extraDirs,gateway.heartbeat,gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback,gateway.http.endpoints.chatCompletions}"
 if [ "${OPENCLAW_ENABLE_LEGACY_CONFIG_COMPAT:-0}" = "1" ]; then
     OPENCLAW_COMPAT_CONFIG_PATH="${OPENCLAW_COMPAT_CONFIG_PATH:-${OPENCLAW_LEGACY_CONFIG_PATH}}"
     export OPENCLAW_COMPAT_CONFIG_PATH

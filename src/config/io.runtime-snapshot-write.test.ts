@@ -266,7 +266,12 @@ describe("runtime config snapshot writes", () => {
         state: process.env.OPENCLAW_STATE_DIR,
         unset: process.env.OPENCLAW_PERSIST_CONFIG_UNSET_PATHS,
       };
-      const sourceConfig = createSourceConfig();
+      const sourceConfig: OpenClawConfig = {
+        ...createSourceConfig(),
+        agents: {
+          defaults: { heartbeat: { every: "30m" } },
+        },
+      };
       const compatibilityPath = path.join(stateDir, "openclaw.json");
       const runtimeConfig: OpenClawConfig = {
         ...createRuntimeConfig(),
@@ -275,6 +280,7 @@ describe("runtime config snapshot writes", () => {
           allowedAgentIds: ["paula"],
         },
         agents: {
+          defaults: { heartbeat: { every: "0m" } },
           list: [{ id: "paula", default: true }],
         },
       };
@@ -297,7 +303,8 @@ describe("runtime config snapshot writes", () => {
       process.env.OPENCLAW_COMPAT_CONFIG_PATH = compatibilityPath;
       process.env.OPENCLAW_PERSIST_CONFIG_PATH = persistPath;
       process.env.OPENCLAW_STATE_DIR = stateDir;
-      process.env.OPENCLAW_PERSIST_CONFIG_UNSET_PATHS = "hooks,agents.list";
+      process.env.OPENCLAW_PERSIST_CONFIG_UNSET_PATHS =
+        "hooks,agents.list,agents.defaults.heartbeat";
 
       try {
         setRuntimeConfigSnapshot(runtimeConfig, sourceConfig);
@@ -307,6 +314,7 @@ describe("runtime config snapshot writes", () => {
         expect(persisted.gateway?.auth).toEqual({ mode: "token" });
         expect(persisted.hooks).toBeUndefined();
         expect(persisted.agents?.list).toBeUndefined();
+        expect(persisted.agents?.defaults?.heartbeat).toBeUndefined();
         expect(JSON.parse(await fs.readFile(runtimePath, "utf8"))).toEqual(runtimeFileConfig);
         expect(loadConfig().gateway?.auth).toEqual({ mode: "token" });
         const compatibility = JSON.parse(
@@ -325,7 +333,10 @@ describe("runtime config snapshot writes", () => {
           ...loadConfig(),
           agents: {
             ...loadConfig().agents,
-            defaults: { maxConcurrent: 2 },
+            defaults: {
+              ...loadConfig().agents?.defaults,
+              maxConcurrent: 2,
+            },
           },
         });
         const persistedAfterDirectWrite = JSON.parse(
@@ -333,6 +344,7 @@ describe("runtime config snapshot writes", () => {
         ) as OpenClawConfig;
         expect(persistedAfterDirectWrite.agents?.defaults?.maxConcurrent).toBe(2);
         expect(persistedAfterDirectWrite.agents?.list).toBeUndefined();
+        expect(persistedAfterDirectWrite.agents?.defaults?.heartbeat).toBeUndefined();
 
         await expect(
           writeConfigFile({
@@ -340,6 +352,17 @@ describe("runtime config snapshot writes", () => {
             hooks: { ...runtimeConfig.hooks, enabled: false },
           }),
         ).rejects.toThrow("Config path is image-managed and cannot be changed: hooks");
+        await expect(
+          writeConfigFile({
+            ...nextRuntimeConfig,
+            agents: {
+              ...runtimeConfig.agents,
+              defaults: { heartbeat: { every: "30m" } },
+            },
+          }),
+        ).rejects.toThrow(
+          "Config path is image-managed and cannot be changed: agents.defaults.heartbeat",
+        );
       } finally {
         resetRuntimeConfigState();
         if (previousEnv.config === undefined) {
