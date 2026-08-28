@@ -16,14 +16,16 @@ const requiredHooks = {
 
 const defaultsObject = {
   gateway: {
-    heartbeat: { enabled: false },
     controlUi: { dangerouslyAllowHostHeaderOriginFallback: true },
     http: { endpoints: { chatCompletions: { enabled: true } } },
   },
   hooks: requiredHooks,
   channels: { telegram: { groupPolicy: "open" } },
   agents: {
-    defaults: { model: { primary: "litellm/claude-sonnet-4-6" } },
+    defaults: {
+      model: { primary: "litellm/claude-sonnet-4-6" },
+      heartbeat: { every: "0m" },
+    },
     list: [{ id: "paula", default: true }],
   },
   skills: { load: { extraDirs: ["/app/envoy-tools/skills"] } },
@@ -95,7 +97,10 @@ void test("protected tenant paths cannot override image-owned structure", async 
   const paths = await fixture(t, {
     overrides: JSON.stringify({
       hooks: { enabled: false, allowedAgentIds: [] },
-      agents: { list: [{ id: "other", default: true }] },
+      agents: {
+        defaults: { heartbeat: { every: "30m" } },
+        list: [{ id: "other", default: true }],
+      },
       skills: { load: { extraDirs: ["/tenant/path"] } },
       gateway: {
         heartbeat: { enabled: true },
@@ -103,16 +108,23 @@ void test("protected tenant paths cannot override image-owned structure", async 
       },
     }),
   });
+  const compatibilityConfigPath = path.join(paths.directory, "state", "openclaw.json");
 
-  await createOpenClawRuntimeConfig(paths);
+  await createOpenClawRuntimeConfig({
+    ...paths,
+    compatibilityConfigPath,
+  });
   const runtime = JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8"));
+  const compatibility = JSON.parse(await fs.readFile(compatibilityConfigPath, "utf8"));
 
   assert.equal(runtime.hooks.enabled, true);
   assert.deepEqual(runtime.hooks.allowedAgentIds, ["paula"]);
   assert.deepEqual(runtime.agents.list, [{ id: "paula", default: true }]);
   assert.deepEqual(runtime.skills.load.extraDirs, ["/app/envoy-tools/skills"]);
-  assert.equal(runtime.gateway.heartbeat.enabled, false);
+  assert.equal(runtime.agents.defaults.heartbeat.every, "0m");
+  assert.equal(runtime.gateway.heartbeat, undefined);
   assert.equal(runtime.gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback, true);
+  assert.deepEqual(compatibility, runtime);
 });
 
 void test("materializes a rollback-compatible legacy config when configured", async (t) => {

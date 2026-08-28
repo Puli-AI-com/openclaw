@@ -1,8 +1,5 @@
 {
   "gateway": {
-    "heartbeat": {
-      "enabled": false
-    },
     "controlUi": {
       "dangerouslyAllowHostHeaderOriginFallback": true
     },
@@ -52,17 +49,16 @@
       "model": {
         "primary": "litellm/claude-sonnet-4-6"
       },
+      "heartbeat": {
+        "every": "0m"
+      },
       "skipBootstrap": true
     },
-    "list": [
-      { "id": "paula", "default": true }
-    ]
+    "list": [{ "id": "paula", "default": true }]
   },
   "skills": {
     "load": {
-      "extraDirs": [
-        "/app/envoy-tools/skills"
-      ]
+      "extraDirs": ["/app/envoy-tools/skills"]
     }
   }
 }
