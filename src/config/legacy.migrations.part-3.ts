@@ -98,6 +98,38 @@ function mergeLegacyIntoDefaults(params: {
 
 export const LEGACY_CONFIG_MIGRATIONS_PART_3: LegacyConfigMigration[] = [
   {
+    id: "gateway.heartbeat.enabled->agents.defaults.heartbeat.every",
+    describe: "Move legacy gateway heartbeat disablement to agents.defaults.heartbeat.every",
+    apply: (raw, changes) => {
+      const gateway = getRecord(raw.gateway);
+      const legacyHeartbeat = getRecord(gateway?.heartbeat);
+      if (!gateway || !legacyHeartbeat || typeof legacyHeartbeat.enabled !== "boolean") {
+        return;
+      }
+      if (Object.keys(legacyHeartbeat).some((key) => key !== "enabled")) {
+        return;
+      }
+
+      const agents = ensureRecord(raw, "agents");
+      const defaults = ensureRecord(agents, "defaults");
+      const heartbeat = getRecord(defaults.heartbeat) ?? {};
+      const hasExplicitInterval = heartbeat.every !== undefined;
+      if (!hasExplicitInterval) {
+        heartbeat.every = legacyHeartbeat.enabled ? "30m" : "0m";
+      }
+      defaults.heartbeat = heartbeat;
+
+      delete gateway.heartbeat;
+      changes.push(
+        hasExplicitInterval
+          ? "Removed gateway.heartbeat.enabled; kept explicit agents.defaults.heartbeat.every."
+          : legacyHeartbeat.enabled
+            ? 'Moved gateway.heartbeat.enabled=true → agents.defaults.heartbeat.every="30m".'
+            : 'Moved gateway.heartbeat.enabled=false → agents.defaults.heartbeat.every="0m".',
+      );
+    },
+  },
+  {
     // v2026.2.26 added a startup guard requiring gateway.controlUi.allowedOrigins (or the
     // host-header fallback flag) for any non-loopback bind. The onboarding wizard was updated
     // to seed this for new installs, but existing bind=lan/bind=custom installs that upgrade

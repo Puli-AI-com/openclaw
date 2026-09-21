@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { migrateLegacyConfig } from "./legacy-migrate.js";
 import { WHISPER_BASE_AUDIO_MODEL } from "./legacy-migrate.test-helpers.js";
+import { findLegacyConfigIssues } from "./legacy.js";
 
 describe("legacy migrate audio transcription", () => {
   it("moves routing.transcribeAudio into tools.media.audio.models", () => {
@@ -97,6 +98,57 @@ describe("legacy migrate mention routing", () => {
 });
 
 describe("legacy migrate heartbeat config", () => {
+  it("detects gateway heartbeat so startup invokes its migration", () => {
+    expect(findLegacyConfigIssues({ gateway: { heartbeat: { enabled: false } } })).toContainEqual({
+      path: "gateway.heartbeat",
+      message:
+        "gateway.heartbeat.enabled was replaced by agents.defaults.heartbeat.every (auto-migrated on load).",
+    });
+  });
+
+  it("moves disabled gateway heartbeat to agents.defaults.heartbeat", () => {
+    const res = migrateLegacyConfig({
+      gateway: {
+        heartbeat: { enabled: false },
+        controlUi: { dangerouslyAllowHostHeaderOriginFallback: true },
+      },
+    });
+
+    expect(res.changes).toContain(
+      'Moved gateway.heartbeat.enabled=false → agents.defaults.heartbeat.every="0m".',
+    );
+    expect(res.config?.agents?.defaults?.heartbeat?.every).toBe("0m");
+    expect((res.config?.gateway as { heartbeat?: unknown })?.heartbeat).toBeUndefined();
+    expect(res.config?.gateway?.controlUi?.dangerouslyAllowHostHeaderOriginFallback).toBe(true);
+  });
+
+  it("keeps an explicit heartbeat interval for either legacy enabled state", () => {
+    for (const enabled of [false, true]) {
+      const res = migrateLegacyConfig({
+        gateway: { heartbeat: { enabled } },
+        agents: { defaults: { heartbeat: { every: "2h" } } },
+      });
+
+      expect(res.changes).toContain(
+        "Removed gateway.heartbeat.enabled; kept explicit agents.defaults.heartbeat.every.",
+      );
+      expect(res.config?.agents?.defaults?.heartbeat?.every).toBe("2h");
+      expect((res.config?.gateway as { heartbeat?: unknown })?.heartbeat).toBeUndefined();
+    }
+  });
+
+  it("preserves enabled gateway heartbeat with the standard interval", () => {
+    const res = migrateLegacyConfig({
+      gateway: { heartbeat: { enabled: true } },
+    });
+
+    expect(res.changes).toContain(
+      'Moved gateway.heartbeat.enabled=true → agents.defaults.heartbeat.every="30m".',
+    );
+    expect(res.config?.agents?.defaults?.heartbeat?.every).toBe("30m");
+    expect((res.config?.gateway as { heartbeat?: unknown })?.heartbeat).toBeUndefined();
+  });
+
   it("moves top-level heartbeat into agents.defaults.heartbeat", () => {
     const res = migrateLegacyConfig({
       heartbeat: {

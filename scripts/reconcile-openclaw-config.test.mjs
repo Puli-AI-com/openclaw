@@ -15,7 +15,7 @@ const requiredHooks = {
 };
 
 const defaults = `${JSON.stringify({
-  gateway: { heartbeat: { enabled: false } },
+  agents: { defaults: { heartbeat: { every: "0m" } } },
   hooks: requiredHooks,
   channels: { telegram: { groupPolicy: "open" } },
 })}\n`;

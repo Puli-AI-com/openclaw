@@ -48,6 +48,11 @@ function isLegacyGatewayBindHostAlias(value: unknown): boolean {
 
 export const LEGACY_CONFIG_RULES: LegacyConfigRule[] = [
   {
+    path: ["gateway", "heartbeat"],
+    message:
+      "gateway.heartbeat.enabled was replaced by agents.defaults.heartbeat.every (auto-migrated on load).",
+  },
+  {
     path: ["whatsapp"],
     message: "whatsapp config moved to channels.whatsapp (auto-migrated on load).",
   },
