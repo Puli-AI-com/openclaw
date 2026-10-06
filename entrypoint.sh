@@ -80,4 +80,11 @@ else
     echo "entrypoint: warning — health-check script not found: $HEALTH_CHECK_SCRIPT"
 fi
 
+UI_COMPONENT_KB="/opt/puli/knowledge/ui-components/REVISION"
+if [ -f "$UI_COMPONENT_KB" ]; then
+    echo "entrypoint: ui-component KB revision $(cat "$UI_COMPONENT_KB")"
+else
+    echo "entrypoint: warning — ui-component KB not present"
+fi
+
 exec "$@"
