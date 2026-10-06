@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import fs from "node:fs";
@@ -100,7 +101,10 @@ export function installKnowledgeBase({
   try {
     const cloneArgs = ["clone", "--depth", "1", repo, staging];
     if (token) {
-      cloneArgs.unshift("-c", `http.extraheader=AUTHORIZATION: bearer ${token}`);
+      // GitHub's OAuth tokens are rejected as a bearer header on git clone.
+      // Basic auth with the x-access-token username is the form they accept.
+      const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+      cloneArgs.unshift("-c", `http.extraheader=AUTHORIZATION: basic ${basic}`);
     }
     const clone = git(cloneArgs);
     if (clone.status !== 0) {
