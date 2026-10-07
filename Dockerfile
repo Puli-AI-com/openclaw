@@ -367,6 +367,18 @@ RUN find /app/envoy-tools/skills /app/envoy-tools/packages \
 RUN cd /app/envoy-tools/runner && uv sync --no-dev
 RUN chown -R node:node /app/envoy-tools/skills /app/envoy-tools/runner /app/envoy-tools/packages
 
+# Bake the shared knowledge-base repo. ui-components is one folder in that
+# clone; later knowledge bases are sibling folders and ship with the next image.
+# The token is a BuildKit secret and is not written into a layer. A local build
+# without the secret skips the clone. CI sets COMPONENT_KB_REQUIRE_AT_BUILD=1.
+COPY scripts/install-knowledge-base.mjs /app/scripts/install-knowledge-base.mjs
+ARG COMPONENT_KB_CACHEBUST=local
+ARG COMPONENT_KB_REQUIRE_AT_BUILD=0
+RUN --mount=type=secret,id=github_token,required=false \
+    echo "installing envoy knowledge base (cachebust ${COMPONENT_KB_CACHEBUST})" && \
+    COMPONENT_KB_REQUIRE_AT_BUILD="$COMPONENT_KB_REQUIRE_AT_BUILD" \
+    node /app/scripts/install-knowledge-base.mjs
+
 # Security hardening: Run as non-root user
 # The node:24-bookworm image includes a 'node' user (uid 1000)
 # This reduces the attack surface by preventing container escape via root privileges
