@@ -19,4 +19,12 @@ describe("Puli image default config", () => {
     expect(config.agents?.defaults?.heartbeat).toEqual({ every: "0m" });
     expect(resolveHeartbeatIntervalMs(config)).toBeNull();
   });
+
+  it("keeps sub-agents past the 60 minute default sweep with a schema-valid value", () => {
+    const config = JSON.parse(readFileSync(defaultConfigPath, "utf8")) as OpenClawConfig;
+
+    // The schema requires a positive integer, so "never archive" cannot be written as 0.
+    expect(validateConfigObjectRaw(config)).toMatchObject({ ok: true });
+    expect(config.agents?.defaults?.subagents?.archiveAfterMinutes).toBe(1440);
+  });
 });
