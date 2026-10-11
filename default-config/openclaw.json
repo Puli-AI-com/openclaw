@@ -52,6 +52,9 @@
       "heartbeat": {
         "every": "0m"
       },
+      "subagents": {
+        "archiveAfterMinutes": 1440
+      },
       "skipBootstrap": true
     },
     "list": [{ "id": "paula", "default": true }]
