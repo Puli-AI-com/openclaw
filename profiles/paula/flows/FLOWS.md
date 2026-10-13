@@ -7,6 +7,10 @@ Use this index to select the correct workflow guide whenever a request is multi-
 | `app_version_update` | User wants to upload a new APK/IPA and update app context/scenarios | `flows/app_version_update_flow.md` |
 | `test_cycle_creation` | User wants to create/configure/start a new test cycle | `flows/test_cycle_creation_flow.md` |
 
+## Demo sessions
+
+In a session that has a `[DEMO CONTEXT]` block, `test_cycle_creation` uses `flows/demo/test_cycle_creation_flow.md` instead of the guide in the table above. Every other flow is unchanged.
+
 ## Selection rules
 
 1. Match by user intent (not by exact wording).
