@@ -1,5 +1,7 @@
 # Flow: test_cycle_creation
 
+> In a session that has a `[DEMO CONTEXT]` block, follow `flows/demo/test_cycle_creation_flow.md` instead of this file and skip its Step 0.
+
 ## Purpose
 
 Create a new test cycle through the in-chat setup widget and confirm launch.
