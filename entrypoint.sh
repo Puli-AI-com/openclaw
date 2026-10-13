@@ -50,6 +50,12 @@ if [ -d "$PROFILE_DIR" ]; then
     else
         echo "entrypoint: profile '$PROFILE' up to date (version $CURRENT_VERSION)"
     fi
+
+    # flows/, user_profiles/ and USER_PROFILE.md are linked to the image on every start, not copied
+    # on a version bump. The script exits 1 on failure and set -e stops the start.
+    mkdir -p "$WORKSPACE"
+    sh /app/scripts/link-profile-files.sh "$PROFILE_DIR" "$WORKSPACE"
+    echo "entrypoint: profile flow files linked into the workspace"
 else
     echo "entrypoint: warning — profile directory not found: $PROFILE_DIR"
 fi

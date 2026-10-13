@@ -324,6 +324,7 @@ COPY default-config/openclaw.json /app/default-config/openclaw.json
 COPY --chown=node:node scripts/config-state-separation.mjs /app/scripts/config-state-separation.mjs
 COPY --chown=node:node scripts/migrate-config-state-separation.mjs /app/scripts/migrate-config-state-separation.mjs
 COPY --chown=node:node scripts/reconcile-openclaw-config.mjs /app/scripts/reconcile-openclaw-config.mjs
+COPY --chown=node:node scripts/link-profile-files.sh /app/scripts/link-profile-files.sh
 RUN mkdir -p /home/node/.openclaw /var/lib/puli/openclaw-state /tmp/puli-openclaw && \
     chown -R node:node /home/node/.openclaw /var/lib/puli /tmp/puli-openclaw
 
