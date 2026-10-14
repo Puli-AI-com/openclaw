@@ -51,6 +51,22 @@ describe("Dockerfile", () => {
     expect(users.at(-1)).toBe("USER node");
   });
 
+  it("removes the node-llama-cpp GPU backends in the runtime-assets stage and keeps the CPU one", async () => {
+    const dockerfile = await readFile(dockerfilePath, "utf8");
+    const stageStart = dockerfile.indexOf("FROM build AS runtime-assets");
+    const stageEnd = dockerfile.indexOf("# ── Runtime base images");
+    const stage = dockerfile.slice(stageStart, stageEnd);
+    expect(stageStart).toBeGreaterThan(-1);
+    expect(stageEnd).toBeGreaterThan(stageStart);
+    for (const backend of ["linux-x64-cuda-ext", "linux-x64-cuda", "linux-x64-vulkan"]) {
+      expect(stage).toContain(`@node-llama-cpp+${backend}@*`);
+      expect(stage).toContain(`-name ${backend}`);
+    }
+    // The CPU backend (@node-llama-cpp/linux-x64) must not be deleted.
+    expect(stage).not.toMatch(/@node-llama-cpp\+linux-x64@/);
+    expect(stage).not.toMatch(/-name linux-x64 /);
+  });
+
   it("installs optional browser dependencies after pnpm install", async () => {
     const dockerfile = await readFile(dockerfilePath, "utf8");
     const installIndex = dockerfile.indexOf("pnpm install --frozen-lockfile");

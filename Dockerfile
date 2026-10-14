@@ -139,6 +139,19 @@ RUN TOKIO_WORKER_THREADS=2 NODE_OPTIONS=--max-old-space-size=1536 pnpm ui:build
 FROM build AS runtime-assets
 RUN CI=true pnpm prune --prod && \
     find dist -type f \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.map' \) -delete
+# node-llama-cpp ships prebuilt GPU backends for x64 only (CUDA 463 + 158 MB,
+# Vulkan 76 MB, about 0.7 GB). The CM runs on ECS tasks without a GPU and loads
+# node-llama-cpp lazily and only for the local embedding provider, so the GPU
+# backends can never run. The CPU backend (@node-llama-cpp/linux-x64) stays, so
+# local embeddings still work. This must run in this stage: a delete in the
+# final stage would not shrink the layer that already holds the files. On arm64
+# the paths do not exist and nothing is removed.
+RUN rm -rf \
+      /app/node_modules/.pnpm/@node-llama-cpp+linux-x64-cuda-ext@* \
+      /app/node_modules/.pnpm/@node-llama-cpp+linux-x64-cuda@* \
+      /app/node_modules/.pnpm/@node-llama-cpp+linux-x64-vulkan@* && \
+    find /app/node_modules/.pnpm -maxdepth 4 -type l -path '*/@node-llama-cpp/*' \
+      \( -name linux-x64-cuda -o -name linux-x64-cuda-ext -o -name linux-x64-vulkan \) -delete
 
 # ── Runtime base images ─────────────────────────────────────────
 FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS base-default
