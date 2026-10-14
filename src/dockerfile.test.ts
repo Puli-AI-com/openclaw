@@ -12,15 +12,59 @@ describe("Dockerfile", () => {
     expect(dockerfile).toContain(
       'ARG OPENCLAW_NODE_BOOKWORM_IMAGE="node:24-bookworm@sha256:3a09aa6354567619221ef6c45a5051b671f953f0a1924d1f819ffb236e520e6b"',
     );
-    expect(dockerfile).toContain(
-      'ARG OPENCLAW_NODE_BOOKWORM_SLIM_IMAGE="node:24-bookworm-slim@sha256:e8e2e91b1378f83c5b2dd15f0247f34110e2fe895f6ca7719dbb780f929368eb"',
-    );
     expect(dockerfile).toContain("FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS ext-deps");
     expect(dockerfile).toContain("FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS build");
     expect(dockerfile).toContain("FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS base-default");
-    expect(dockerfile).toContain("FROM ${OPENCLAW_NODE_BOOKWORM_SLIM_IMAGE} AS base-slim");
     expect(dockerfile).toContain("current multi-arch manifest list entry");
     expect(dockerfile).not.toContain("current amd64 entry");
+  });
+
+  it("has no slim variant", async () => {
+    const dockerfile = await readFile(dockerfilePath, "utf8");
+    expect(dockerfile).not.toContain("bookworm-slim");
+    expect(dockerfile).not.toContain("OPENCLAW_VARIANT");
+    expect(dockerfile).toContain("FROM base-default");
+  });
+
+  it("creates the runner environment as the node user without a chown copy", async () => {
+    const dockerfile = await readFile(dockerfilePath, "utf8");
+    for (const source of ["shared_skills", "runner", "packages"]) {
+      expect(dockerfile).toContain(`COPY --chown=node:node --from=${source}`);
+    }
+    // A chown -R over the runner environment rewrites it into a second layer.
+    expect(dockerfile).not.toContain("chown -R node:node /app/envoy-tools");
+
+    const nodeIndex = dockerfile.indexOf("USER node\nRUN cd /app/envoy-tools/runner && uv sync");
+    const syncIndex = dockerfile.indexOf("uv sync --no-dev");
+    const rootIndex = dockerfile.indexOf("USER root", syncIndex);
+    const knowledgeIndex = dockerfile.indexOf("RUN --mount=type=secret,id=github_token");
+    expect(nodeIndex).toBeGreaterThan(-1);
+    expect(nodeIndex).toBeLessThan(syncIndex);
+    // The knowledge-base step writes /opt/puli/knowledge and needs root.
+    expect(rootIndex).toBeGreaterThan(syncIndex);
+    expect(knowledgeIndex).toBeGreaterThan(rootIndex);
+  });
+
+  it("ends as the node user", async () => {
+    const dockerfile = await readFile(dockerfilePath, "utf8");
+    const users = dockerfile.match(/^USER .+$/gm) ?? [];
+    expect(users.at(-1)).toBe("USER node");
+  });
+
+  it("removes the node-llama-cpp GPU backends in the runtime-assets stage and keeps the CPU one", async () => {
+    const dockerfile = await readFile(dockerfilePath, "utf8");
+    const stageStart = dockerfile.indexOf("FROM build AS runtime-assets");
+    const stageEnd = dockerfile.indexOf("# ── Runtime base images");
+    const stage = dockerfile.slice(stageStart, stageEnd);
+    expect(stageStart).toBeGreaterThan(-1);
+    expect(stageEnd).toBeGreaterThan(stageStart);
+    for (const backend of ["linux-x64-cuda-ext", "linux-x64-cuda", "linux-x64-vulkan"]) {
+      expect(stage).toContain(`@node-llama-cpp+${backend}@*`);
+      expect(stage).toContain(`-name ${backend}`);
+    }
+    // The CPU backend (@node-llama-cpp/linux-x64) must not be deleted.
+    expect(stage).not.toMatch(/@node-llama-cpp\+linux-x64@/);
+    expect(stage).not.toMatch(/-name linux-x64 /);
   });
 
   it("installs optional browser dependencies after pnpm install", async () => {

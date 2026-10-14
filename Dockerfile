@@ -8,16 +8,9 @@
 # The ext-deps stage extracts only the package.json files we need from
 # extensions/, so the main build layer is not invalidated by unrelated
 # extension source changes.
-#
-# Two runtime variants:
-#   Default (bookworm):      docker build .
-#   Slim (bookworm-slim):    docker build --build-arg OPENCLAW_VARIANT=slim .
 ARG OPENCLAW_EXTENSIONS=""
-ARG OPENCLAW_VARIANT=default
 ARG OPENCLAW_NODE_BOOKWORM_IMAGE="node:24-bookworm@sha256:3a09aa6354567619221ef6c45a5051b671f953f0a1924d1f819ffb236e520e6b"
 ARG OPENCLAW_NODE_BOOKWORM_DIGEST="sha256:3a09aa6354567619221ef6c45a5051b671f953f0a1924d1f819ffb236e520e6b"
-ARG OPENCLAW_NODE_BOOKWORM_SLIM_IMAGE="node:24-bookworm-slim@sha256:e8e2e91b1378f83c5b2dd15f0247f34110e2fe895f6ca7719dbb780f929368eb"
-ARG OPENCLAW_NODE_BOOKWORM_SLIM_DIGEST="sha256:e8e2e91b1378f83c5b2dd15f0247f34110e2fe895f6ca7719dbb780f929368eb"
 
 # Base images are pinned to SHA256 digests for reproducible builds.
 # Trade-off: digests must be updated manually when upstream tags move.
@@ -146,6 +139,19 @@ RUN TOKIO_WORKER_THREADS=2 NODE_OPTIONS=--max-old-space-size=1536 pnpm ui:build
 FROM build AS runtime-assets
 RUN CI=true pnpm prune --prod && \
     find dist -type f \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.map' \) -delete
+# node-llama-cpp ships prebuilt GPU backends for x64 only (CUDA 463 + 158 MB,
+# Vulkan 76 MB, about 0.7 GB). The CM runs on ECS tasks without a GPU and loads
+# node-llama-cpp lazily and only for the local embedding provider, so the GPU
+# backends can never run. The CPU backend (@node-llama-cpp/linux-x64) stays, so
+# local embeddings still work. This must run in this stage: a delete in the
+# final stage would not shrink the layer that already holds the files. On arm64
+# the paths do not exist and nothing is removed.
+RUN rm -rf \
+      /app/node_modules/.pnpm/@node-llama-cpp+linux-x64-cuda-ext@* \
+      /app/node_modules/.pnpm/@node-llama-cpp+linux-x64-cuda@* \
+      /app/node_modules/.pnpm/@node-llama-cpp+linux-x64-vulkan@* && \
+    find /app/node_modules/.pnpm -maxdepth 4 -type l -path '*/@node-llama-cpp/*' \
+      \( -name linux-x64-cuda -o -name linux-x64-cuda-ext -o -name linux-x64-vulkan \) -delete
 
 # ── Runtime base images ─────────────────────────────────────────
 FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS base-default
@@ -153,14 +159,8 @@ ARG OPENCLAW_NODE_BOOKWORM_DIGEST
 LABEL org.opencontainers.image.base.name="docker.io/library/node:24-bookworm" \
   org.opencontainers.image.base.digest="${OPENCLAW_NODE_BOOKWORM_DIGEST}"
 
-FROM ${OPENCLAW_NODE_BOOKWORM_SLIM_IMAGE} AS base-slim
-ARG OPENCLAW_NODE_BOOKWORM_SLIM_DIGEST
-LABEL org.opencontainers.image.base.name="docker.io/library/node:24-bookworm-slim" \
-  org.opencontainers.image.base.digest="${OPENCLAW_NODE_BOOKWORM_SLIM_DIGEST}"
-
 # ── Stage 3: Runtime ────────────────────────────────────────────
-FROM base-${OPENCLAW_VARIANT}
-ARG OPENCLAW_VARIANT
+FROM base-default
 
 # OCI base-image metadata for downstream image consumers.
 # If you change these annotations, also update:
@@ -174,14 +174,6 @@ LABEL org.opencontainers.image.source="https://github.com/openclaw/openclaw" \
   org.opencontainers.image.description="OpenClaw gateway and CLI runtime container image"
 
 WORKDIR /app
-
-# Install system utilities present in bookworm but missing in bookworm-slim.
-# On the full bookworm image these are already installed (apt-get is a no-op).
-RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
-    apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      procps hostname curl git openssl
 
 RUN chown node:node /app
 
@@ -349,12 +341,12 @@ ENV RAMPUP_HOME=/app/envoy-tools/skills
 ENV RAMPUP_DATA_DIR=/var/lib/puli/openclaw-state/workspace/applications
 ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/packages/screen_bundle/src
 ENV RUNNER_ROOT=/app/envoy-tools/runner
-COPY --from=shared_skills . /app/envoy-tools/skills/
+COPY --chown=node:node --from=shared_skills . /app/envoy-tools/skills/
 # Copy runner source and packages (screen_bundle) so the directory layout mirrors
 # the monorepo exactly — runner/pyproject.toml relative paths (../skills/...,
 # ../packages/...) resolve correctly at /app/envoy-tools/runner/.
-COPY --from=runner   . /app/envoy-tools/runner/
-COPY --from=packages . /app/envoy-tools/packages/
+COPY --chown=node:node --from=runner   . /app/envoy-tools/runner/
+COPY --chown=node:node --from=packages . /app/envoy-tools/packages/
 # The additional build contexts copy the host working tree verbatim and do NOT
 # honor .gitignore, so any local virtualenvs / bytecode caches (often built for
 # a different OS/Python, e.g. a macOS .venv) get baked in. Strip them so `uv`
@@ -365,8 +357,12 @@ RUN find /app/envoy-tools/skills /app/envoy-tools/packages \
       -type d \( -name .venv -o -name __pycache__ \) -prune -exec rm -rf {} +
 # Pre-warm the runner's mobile-only uv venv so the first agent run has no
 # install latency. Uses the base deps only (no --extra desktop).
+# It runs as node so the venv is created already owned by node: a chown -R over
+# it afterwards would rewrite every file into a second layer of the same size.
+# The root-only steps below (knowledge base) need root again.
+USER node
 RUN cd /app/envoy-tools/runner && uv sync --no-dev
-RUN chown -R node:node /app/envoy-tools/skills /app/envoy-tools/runner /app/envoy-tools/packages
+USER root
 
 # Bake the shared knowledge-base repo. ui-components is one folder in that
 # clone; later knowledge bases are sibling folders and ship with the next image.
