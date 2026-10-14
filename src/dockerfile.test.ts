@@ -23,6 +23,31 @@ describe("Dockerfile", () => {
     expect(dockerfile).not.toContain("current amd64 entry");
   });
 
+  it("creates the runner environment as the node user without a chown copy", async () => {
+    const dockerfile = await readFile(dockerfilePath, "utf8");
+    for (const source of ["shared_skills", "runner", "packages"]) {
+      expect(dockerfile).toContain(`COPY --chown=node:node --from=${source}`);
+    }
+    // A chown -R over the runner environment rewrites it into a second layer.
+    expect(dockerfile).not.toContain("chown -R node:node /app/envoy-tools");
+
+    const nodeIndex = dockerfile.indexOf("USER node\nRUN cd /app/envoy-tools/runner && uv sync");
+    const syncIndex = dockerfile.indexOf("uv sync --no-dev");
+    const rootIndex = dockerfile.indexOf("USER root", syncIndex);
+    const knowledgeIndex = dockerfile.indexOf("RUN --mount=type=secret,id=github_token");
+    expect(nodeIndex).toBeGreaterThan(-1);
+    expect(nodeIndex).toBeLessThan(syncIndex);
+    // The knowledge-base step writes /opt/puli/knowledge and needs root.
+    expect(rootIndex).toBeGreaterThan(syncIndex);
+    expect(knowledgeIndex).toBeGreaterThan(rootIndex);
+  });
+
+  it("ends as the node user", async () => {
+    const dockerfile = await readFile(dockerfilePath, "utf8");
+    const users = dockerfile.match(/^USER .+$/gm) ?? [];
+    expect(users.at(-1)).toBe("USER node");
+  });
+
   it("installs optional browser dependencies after pnpm install", async () => {
     const dockerfile = await readFile(dockerfilePath, "utf8");
     const installIndex = dockerfile.indexOf("pnpm install --frozen-lockfile");

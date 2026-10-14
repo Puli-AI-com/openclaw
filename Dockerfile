@@ -349,12 +349,12 @@ ENV RAMPUP_HOME=/app/envoy-tools/skills
 ENV RAMPUP_DATA_DIR=/var/lib/puli/openclaw-state/workspace/applications
 ENV SCREEN_BUNDLE_SRC=/app/envoy-tools/packages/screen_bundle/src
 ENV RUNNER_ROOT=/app/envoy-tools/runner
-COPY --from=shared_skills . /app/envoy-tools/skills/
+COPY --chown=node:node --from=shared_skills . /app/envoy-tools/skills/
 # Copy runner source and packages (screen_bundle) so the directory layout mirrors
 # the monorepo exactly — runner/pyproject.toml relative paths (../skills/...,
 # ../packages/...) resolve correctly at /app/envoy-tools/runner/.
-COPY --from=runner   . /app/envoy-tools/runner/
-COPY --from=packages . /app/envoy-tools/packages/
+COPY --chown=node:node --from=runner   . /app/envoy-tools/runner/
+COPY --chown=node:node --from=packages . /app/envoy-tools/packages/
 # The additional build contexts copy the host working tree verbatim and do NOT
 # honor .gitignore, so any local virtualenvs / bytecode caches (often built for
 # a different OS/Python, e.g. a macOS .venv) get baked in. Strip them so `uv`
@@ -365,8 +365,12 @@ RUN find /app/envoy-tools/skills /app/envoy-tools/packages \
       -type d \( -name .venv -o -name __pycache__ \) -prune -exec rm -rf {} +
 # Pre-warm the runner's mobile-only uv venv so the first agent run has no
 # install latency. Uses the base deps only (no --extra desktop).
+# It runs as node so the venv is created already owned by node: a chown -R over
+# it afterwards would rewrite every file into a second layer of the same size.
+# The root-only steps below (knowledge base) need root again.
+USER node
 RUN cd /app/envoy-tools/runner && uv sync --no-dev
-RUN chown -R node:node /app/envoy-tools/skills /app/envoy-tools/runner /app/envoy-tools/packages
+USER root
 
 # Bake the shared knowledge-base repo. ui-components is one folder in that
 # clone; later knowledge bases are sibling folders and ship with the next image.
