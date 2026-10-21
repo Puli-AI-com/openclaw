@@ -61,6 +61,8 @@ const ERROR_PATTERNS = {
     /\binternal server error\b/,
     /\bmodel stream error\b/,
     "unexpected error during processing",
+    // Bedrock ServiceUnavailableException's standard text, raw or wrapped by LiteLLM.
+    "unable to process your request",
     /\binternalserverexception\b|\bmodelstreamerrorexception\b|\bserviceunavailableexception\b/,
     /\bmodel(?:timeout|notready)exception\b/,
   ],
