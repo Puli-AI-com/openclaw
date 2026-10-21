@@ -51,7 +51,9 @@ import {
   parseImageSizeError,
   parseImageDimensionError,
   isRateLimitAssistantError,
+  isSameModelRetryableError,
   isTimeoutErrorMessage,
+  extractRetryAfterMs,
   pickFallbackThinkingLevel,
   type FailoverReason,
 } from "../pi-embedded-helpers.js";
@@ -65,6 +67,7 @@ import { runEmbeddedAttempt } from "./run/attempt.js";
 import { createFailoverDecisionLogger } from "./run/failover-observation.js";
 import type { RunEmbeddedPiAgentParams } from "./run/params.js";
 import { buildEmbeddedRunPayloads } from "./run/payloads.js";
+import type { EmbeddedRunAttemptResult } from "./run/types.js";
 import {
   truncateOversizedToolResultsInSession,
   sessionLikelyHasOversizedToolResults,
@@ -92,6 +95,14 @@ const OVERLOAD_FAILOVER_BACKOFF_POLICY: BackoffPolicy = {
   factor: 2,
   jitter: 0.2,
 };
+
+// Same-model retry for transient provider errors (5xx, stream errors, throttling)
+// before any profile/model fallback or surfacing the error. Hooks and cron turns have
+// no other same-model retry, so this lives in the runner for every caller.
+const TRANSIENT_RETRY_MAX_ATTEMPTS = 3;
+const TRANSIENT_RETRY_BASE_MS = 1_000;
+const TRANSIENT_RETRY_MAX_DELAY_MS = 20_000;
+const TRANSIENT_RETRY_BUDGET_MS = 90_000;
 
 // Avoid Anthropic's refusal test token poisoning session transcripts.
 const ANTHROPIC_MAGIC_STRING_TRIGGER_REFUSAL = "ANTHROPIC_MAGIC_STRING_TRIGGER_REFUSAL";
@@ -658,6 +669,7 @@ export async function runEmbeddedPiAgent(
         return false;
       };
 
+      let didTransientCooldownProbe = false;
       try {
         const autoProfileCandidates = profileCandidates.filter(
           (candidate): candidate is string =>
@@ -679,7 +691,6 @@ export async function runEmbeddedPiAgent(
             unavailableReason === "overloaded" ||
             unavailableReason === "billing" ||
             unavailableReason === "unknown");
-        let didTransientCooldownProbe = false;
 
         while (profileIndex < profileCandidates.length) {
           const candidate = profileCandidates[profileIndex];
@@ -749,6 +760,9 @@ export async function runEmbeddedPiAgent(
       let autoCompactionCount = 0;
       let runLoopIterations = 0;
       let overloadFailoverAttempts = 0;
+      let transientRetryAttempts = 0;
+      let transientRetryFirstFailureAt: number | undefined;
+      let transientRetryProfileId: string | undefined;
       const maybeMarkAuthProfileFailure = async (failure: {
         profileId?: string;
         reason?: AuthProfileFailureReason | null;
@@ -757,6 +771,15 @@ export async function runEmbeddedPiAgent(
       }) => {
         const { profileId, reason } = failure;
         if (!profileId || !reason || reason === "timeout") {
+          return;
+        }
+        // A same-model retry repeats one incident; count it once so cooldowns do not
+        // escalate per retry.
+        if (
+          transientRetryAttempts > 0 &&
+          profileId === transientRetryProfileId &&
+          (reason === "overloaded" || reason === "rate_limit")
+        ) {
           return;
         }
         await markAuthProfileFailure({
@@ -778,15 +801,7 @@ export async function runEmbeddedPiAgent(
         }
         return failoverReason;
       };
-      const maybeBackoffBeforeOverloadFailover = async (reason: FailoverReason | null) => {
-        if (reason !== "overloaded") {
-          return;
-        }
-        overloadFailoverAttempts += 1;
-        const delayMs = computeBackoff(OVERLOAD_FAILOVER_BACKOFF_POLICY, overloadFailoverAttempts);
-        log.warn(
-          `overload backoff before failover for ${provider}/${modelId}: attempt=${overloadFailoverAttempts} delayMs=${delayMs}`,
-        );
+      const sleepBeforeRetry = async (delayMs: number) => {
         try {
           await sleepWithAbort(delayMs, params.abortSignal);
         } catch (err) {
@@ -797,6 +812,63 @@ export async function runEmbeddedPiAgent(
           }
           throw err;
         }
+      };
+      const maybeBackoffBeforeOverloadFailover = async (reason: FailoverReason | null) => {
+        if (reason !== "overloaded") {
+          return;
+        }
+        overloadFailoverAttempts += 1;
+        const delayMs = computeBackoff(OVERLOAD_FAILOVER_BACKOFF_POLICY, overloadFailoverAttempts);
+        log.warn(
+          `overload backoff before failover for ${provider}/${modelId}: attempt=${overloadFailoverAttempts} delayMs=${delayMs}`,
+        );
+        await sleepBeforeRetry(delayMs);
+      };
+      // Returns true after backing off when the caller should re-run the attempt on
+      // the same model. Only attempts that produced nothing (no text, no tool calls,
+      // no messaging-tool sends) qualify, so a retry never repeats visible output or
+      // side effects.
+      const maybeBackoffBeforeTransientRetry = async (
+        attempt: EmbeddedRunAttemptResult,
+        errorText: string,
+        reason: FailoverReason | null,
+      ): Promise<boolean> => {
+        const producedOutput =
+          attempt.assistantTexts.length > 0 ||
+          attempt.toolMetas.length > 0 ||
+          attempt.didSendViaMessagingTool;
+        // A cooldown probe is a single check of a cooling-down profile; do not extend it.
+        if (
+          producedOutput ||
+          didTransientCooldownProbe ||
+          transientRetryAttempts >= TRANSIENT_RETRY_MAX_ATTEMPTS - 1 ||
+          !isSameModelRetryableError(errorText)
+        ) {
+          return false;
+        }
+        const now = Date.now();
+        transientRetryFirstFailureAt ??= now;
+        const backoffMs = Math.round(
+          TRANSIENT_RETRY_BASE_MS * 2 ** transientRetryAttempts * (0.5 + Math.random()),
+        );
+        const retryAfterMs = extractRetryAfterMs(errorText) ?? 0;
+        const delayMs = Math.max(Math.min(TRANSIENT_RETRY_MAX_DELAY_MS, backoffMs), retryAfterMs);
+        // A provider asking for a longer wait than the cap is not a short blip.
+        if (
+          retryAfterMs > TRANSIENT_RETRY_MAX_DELAY_MS ||
+          now - transientRetryFirstFailureAt + delayMs > TRANSIENT_RETRY_BUDGET_MS
+        ) {
+          return false;
+        }
+        transientRetryAttempts += 1;
+        transientRetryProfileId = lastProfileId;
+        log.warn(
+          `transient model error; retrying same model ${provider}/${modelId}: ` +
+            `attempt=${transientRetryAttempts + 1}/${TRANSIENT_RETRY_MAX_ATTEMPTS} ` +
+            `reason=${reason ?? "unknown"} delayMs=${delayMs}`,
+        );
+        await sleepBeforeRetry(delayMs);
+        return true;
       };
       // Resolve the context engine once and reuse across retries to avoid
       // repeated initialization/connection overhead per attempt.
@@ -1320,6 +1392,10 @@ export async function runEmbeddedPiAgent(
               thinkLevel = fallbackThinking;
               continue;
             }
+            if (await maybeBackoffBeforeTransientRetry(attempt, errorText, promptFailoverReason)) {
+              logPromptFailoverDecision("retry_same_model");
+              continue;
+            }
             // Throw FailoverError for prompt-side failover reasons when fallbacks
             // are configured so outer model fallback can continue on overload,
             // rate-limit, auth, or billing failures.
@@ -1436,6 +1512,19 @@ export async function runEmbeddedPiAgent(
             if (rotated) {
               logAssistantFailoverDecision("rotate_profile");
               await maybeBackoffBeforeOverloadFailover(assistantFailoverReason);
+              continue;
+            }
+
+            if (
+              !aborted &&
+              !timedOut &&
+              (await maybeBackoffBeforeTransientRetry(
+                attempt,
+                lastAssistant?.errorMessage ?? "",
+                assistantFailoverReason,
+              ))
+            ) {
+              logAssistantFailoverDecision("retry_same_model");
               continue;
             }
 

@@ -130,6 +130,8 @@ vi.mock("../pi-embedded-helpers.js", () => ({
   parseImageSizeError: vi.fn(() => null),
   parseImageDimensionError: vi.fn(() => null),
   isRateLimitAssistantError: vi.fn(() => false),
+  isSameModelRetryableError: vi.fn(() => false),
+  extractRetryAfterMs: vi.fn(() => undefined),
   isTimeoutErrorMessage: vi.fn(() => false),
   pickFallbackThinkingLevel: vi.fn(() => null),
 }));

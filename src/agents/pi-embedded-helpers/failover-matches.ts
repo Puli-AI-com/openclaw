@@ -15,6 +15,8 @@ const ERROR_PATTERNS = {
     /\btpm\b/i,
     "tokens per minute",
     "tokens per day",
+    // Bedrock ThrottlingException, raw or as pi-ai's "Throttling error: ..." prefix.
+    /\bthrottling(?: error|exception)\b/,
   ],
   overloaded: [
     /overloaded_error|"type"\s*:\s*"overloaded_error"/i,
@@ -50,6 +52,30 @@ const ERROR_PATTERNS = {
     /\bstop reason:\s*(?:abort|error|malformed_response)\b/i,
     /\breason:\s*(?:abort|error|malformed_response)\b/i,
     /\bunhandled stop reason:\s*(?:abort|error|malformed_response)\b/i,
+  ],
+  // Provider-side 5xx failures that carry no HTTP status prefix, e.g. Bedrock's
+  // InternalServerException ("The system encountered an unexpected error during
+  // processing. Try your request again.") or pi-ai's "Internal server error: ..." and
+  // "Model stream error: ..." in-stream errors. Guarded by `nonRetryable` below.
+  serverError: [
+    /\binternal server error\b/,
+    /\bmodel stream error\b/,
+    "unexpected error during processing",
+    /\binternalserverexception\b|\bmodelstreamerrorexception\b|\bserviceunavailableexception\b/,
+    /\bmodel(?:timeout|notready)exception\b/,
+  ],
+  // Request-side or quota failures that resending the same request cannot fix.
+  // "Too many tokens" is matched only through the validation prefix: Bedrock's
+  // ThrottlingException says "Too many tokens, please wait" and is retryable.
+  nonRetryable: [
+    /\bvalidation(?: error|exception)\b/,
+    /\baccess ?denied(?:exception)?\b/,
+    /\bresource ?not ?found(?:exception)?\b/,
+    /\bmodel ?error ?exception\b/,
+    "input is too long",
+    /spend(?:ing)? (?:limit|cap)/,
+    "quota",
+    "usage limit",
   ],
   billing: [
     /["']?(?:status|code)["']?\s*[:=]\s*402\b|\bhttp\s*402\b|\berror(?:\s+code)?\s*[:=]?\s*402\b|\b(?:got|returned|received)\s+(?:a\s+)?402\b|^\s*402\s+payment/i,
@@ -127,6 +153,17 @@ export function isRateLimitErrorMessage(raw: string): boolean {
 
 export function isTimeoutErrorMessage(raw: string): boolean {
   return matchesErrorPatterns(raw, ERROR_PATTERNS.timeout);
+}
+
+export function isNonRetryableProviderErrorMessage(raw: string): boolean {
+  return matchesErrorPatterns(raw, ERROR_PATTERNS.nonRetryable);
+}
+
+export function isProviderServerErrorMessage(raw: string): boolean {
+  return (
+    matchesErrorPatterns(raw, ERROR_PATTERNS.serverError) &&
+    !isNonRetryableProviderErrorMessage(raw)
+  );
 }
 
 export function isPeriodicUsageLimitErrorMessage(raw: string): boolean {
