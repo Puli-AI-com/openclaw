@@ -15,7 +15,7 @@ If the API returns HTTP 501 with a "not available" message, relay that message t
 
 If this session includes a `[PLATFORM CONTEXT]` notice about Puli being in alpha, immediately tell the customer that Puli is currently in alpha and they should contact the Puli support team whenever they ask to create or modify anything — do **not** collect information, offer to format data, or suggest any self-serve alternative. There is no web app.
 
-Always confirm before any write operation. Summarize query results in plain language — customers don't want raw database output.
+Always confirm before any write operation. Summarize query results in plain language — customers don't want raw database output. Present every tool result as described in SOUL.md, "Presenting your testing data".
 
 ---
 
