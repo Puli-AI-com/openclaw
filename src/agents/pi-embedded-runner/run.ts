@@ -58,6 +58,7 @@ import {
   type FailoverReason,
 } from "../pi-embedded-helpers.js";
 import { ensureRuntimePluginsLoaded } from "../runtime-plugins.js";
+import { acquireSessionWriteLock } from "../session-write-lock.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
@@ -103,6 +104,50 @@ const TRANSIENT_RETRY_MAX_ATTEMPTS = 3;
 const TRANSIENT_RETRY_BASE_MS = 1_000;
 const TRANSIENT_RETRY_MAX_DELAY_MS = 20_000;
 const TRANSIENT_RETRY_BUDGET_MS = 90_000;
+
+// A same-model retry re-runs the same turn, so drop what the failed attempt appended
+// (its user prompt, its error reply and custom entries) from the transcript. Otherwise
+// the retry prompts again: the orphaned-user repair cannot help, because the failed
+// attempt's error reply follows the prompt. Only entries written since the attempt
+// started are touched, and nothing changes unless the tail is exactly that shape.
+async function rewindFailedAttemptTurn(sessionFile: string, attemptStartedAt: number) {
+  try {
+    await fs.access(sessionFile);
+  } catch {
+    return;
+  }
+  let lock: { release: () => Promise<void> } | undefined;
+  try {
+    lock = await acquireSessionWriteLock({ sessionFile });
+    const lines = (await fs.readFile(sessionFile, "utf-8")).split("\n").filter(Boolean);
+    for (let cut = lines.length - 1; cut >= 0; cut -= 1) {
+      const entry = JSON.parse(lines[cut]) as {
+        type?: string;
+        timestamp?: string;
+        message?: { role?: string; stopReason?: string };
+      };
+      if (!(Date.parse(entry.timestamp ?? "") >= attemptStartedAt)) {
+        return;
+      }
+      const role = entry.type === "message" ? entry.message?.role : undefined;
+      if (role === "user") {
+        await fs.writeFile(sessionFile, `${lines.slice(0, cut).join("\n")}\n`);
+        log.info(`dropped the failed attempt's turn from ${sessionFile} before retrying`);
+        return;
+      }
+      const failedReply =
+        role === "assistant" &&
+        (entry.message?.stopReason === "error" || entry.message?.stopReason === "aborted");
+      if (entry.type !== "custom" && !failedReply) {
+        return;
+      }
+    }
+  } catch (err) {
+    log.warn(`could not drop the failed attempt's turn before retrying: ${String(err)}`);
+  } finally {
+    await lock?.release();
+  }
+}
 
 // Avoid Anthropic's refusal test token poisoning session transcripts.
 const ANTHROPIC_MAGIC_STRING_TRIGGER_REFUSAL = "ANTHROPIC_MAGIC_STRING_TRIGGER_REFUSAL";
@@ -763,6 +808,7 @@ export async function runEmbeddedPiAgent(
       let transientRetryAttempts = 0;
       let transientRetryFirstFailureAt: number | undefined;
       let transientRetryProfileId: string | undefined;
+      let attemptStartedAt = 0;
       const maybeMarkAuthProfileFailure = async (failure: {
         profileId?: string;
         reason?: AuthProfileFailureReason | null;
@@ -867,6 +913,7 @@ export async function runEmbeddedPiAgent(
             `attempt=${transientRetryAttempts + 1}/${TRANSIENT_RETRY_MAX_ATTEMPTS} ` +
             `reason=${reason ?? "unknown"} delayMs=${delayMs}`,
         );
+        await rewindFailedAttemptTurn(params.sessionFile, attemptStartedAt);
         await sleepBeforeRetry(delayMs);
         return true;
       };
@@ -920,6 +967,7 @@ export async function runEmbeddedPiAgent(
           const prompt =
             provider === "anthropic" ? scrubAnthropicRefusalMagic(params.prompt) : params.prompt;
 
+          attemptStartedAt = Date.now();
           const attempt = await runEmbeddedAttempt({
             sessionId: params.sessionId,
             sessionKey: params.sessionKey,
