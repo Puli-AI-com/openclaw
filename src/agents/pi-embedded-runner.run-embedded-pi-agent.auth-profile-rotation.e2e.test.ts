@@ -873,7 +873,10 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
     await withAgentWorkspace(async ({ agentDir, workspaceDir }) => {
       await writeAuthStore(agentDir);
 
-      mockSingleErrorAttempt({ errorMessage: "rate limit" });
+      // A pinned profile is retried on the same profile (3 attempts), never rotated.
+      for (let i = 0; i < 3; i += 1) {
+        mockSingleErrorAttempt({ errorMessage: "rate limit" });
+      }
 
       await runEmbeddedPiAgent({
         sessionId: "session:test",
@@ -891,7 +894,7 @@ describe("runEmbeddedPiAgent auth profile rotation", () => {
         runId: "run:user",
       });
 
-      expect(runEmbeddedAttemptMock).toHaveBeenCalledTimes(1);
+      expect(runEmbeddedAttemptMock).toHaveBeenCalledTimes(3);
       await expectProfileP2UsageUnchanged(agentDir);
     });
   });

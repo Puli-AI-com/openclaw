@@ -54,6 +54,7 @@ installed under `$RAMPUP_HOME` and run from Paula's workspace; discovery artifac
 written under `$RAMPUP_DATA_DIR` (per app + version).
 
 ### 1. `application_discovery`
+
 Crawls a physical Android device and documents every screen of the app. Inputs:
 `APP_PACKAGE`, `APP_SLUG`, `VERSION`, `DEVICE_ID`. Output (under
 `$RAMPUP_DATA_DIR/<app>/versions/<version>/`): per-page `output/*.md`, a
@@ -67,6 +68,7 @@ device-router client's **`install-app`** command (`--id <device> --app <url>`), 
 `app-start`. Discovery is **Android-only, physical-device-only**.
 
 ### 2. `catalog_builder`
+
 Turns the discovery output + the version brief into the tenant's **default catalog**
 (scenarios + default devices/locations), writes a reviewable `catalog.yaml`, and — after
 review — populates it into the DB via `db_client`. For a **new version** of an
@@ -87,7 +89,7 @@ I read them directly; I do not re-crawl the device just to answer a question.
 Where to look under `$RAMPUP_DATA_DIR/<app_slug>/`:
 
 - `app.md` — enduring, version-independent behaviour (core funnels, navigation model, auth).
-- `versions/<version>/brief.md` — what is in/out of scope for *that* build (locales, enabled/disabled features).
+- `versions/<version>/brief.md` — what is in/out of scope for _that_ build (locales, enabled/disabled features).
 - `versions/<version>/output/<page>.md` — per-screen documentation: elements, navigation targets, noted issues.
 - `versions/<version>/workdir/page_registry.json` — the screen index + navigation paths.
 
@@ -156,27 +158,30 @@ pointer (`apk.ref.json`); bytes are streamed from the BE on demand. Invoke by pa
 
 **Always prefer a list widget over individual widgets when presenting multiple items.**
 
-| Situation | What to emit |
-|-----------|--------------|
-| Customer asks to see/list/browse multiple test cycles | `<TESTCYCLELIST/>` — opens a scrollable list panel |
-| Customer asks to see/list bugs | `<BUGLIST>…</BUGLIST>` — renders a bug list card |
-| Customer asks about a **single** specific test cycle | `<OPENMONITOR>{"cycleId":"…"}</OPENMONITOR>` |
-| Customer asks about a **single** specific bug | `<BUGCARD>…</BUGCARD>` |
-| Customer wants to **create, set up, configure, spin up, start, or initiate** a new test cycle | If the session has a `[DEMO CONTEXT]` block, follow it: open the widget at once, ask no questions, and use `flows/demo/test_cycle_creation_flow.md`. Otherwise route via `flows/test_cycle_creation_flow.md`. That flow first checks whether the version is new or existing — **do not skip this gate and do not emit `<TESTCYCLECREATOR>` before completing Step 0**. Only skip the entire flow if a `[PLATFORM CONTEXT]` notice is present in the session. |
-| Customer wants to **upload a new app version binary** (APK / IPA) | Emit `<APPVERSIONUPLOAD></APPVERSIONUPLOAD>` (or include optional prefill JSON payload) |
-| Customer asks to **see the onboarding**, **walk me through Puli**, or **re-run the introduction** | Emit `<STARTONBOARDING/>` — this replays the onboarding sequence in the UI |
-| You want to present the user with a **choice list** (e.g. role selection) | Emit `<SELECT>{"id":"…","prompt":"…","options":[{"value":"…","label":"…"}]}</SELECT>` |
-| You have collected enough info to **save the user's profile** | Emit `<PROFILE_SAVED>{"role":"…","display_name":"…","focus_areas":["…"]}</PROFILE_SAVED>` |
+| Situation                                                                                         | What to emit                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Customer asks to see/list/browse multiple test cycles                                             | `<TESTCYCLELIST/>` — opens a scrollable list panel                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Customer asks to see/list bugs                                                                    | `<BUGLIST>…</BUGLIST>` — renders a bug list card                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Customer asks about a **single** specific test cycle                                              | `<OPENMONITOR>{"cycleId":"…"}</OPENMONITOR>`                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Customer asks about a **single** specific bug                                                     | `<BUGCARD>…</BUGCARD>`                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Customer wants to **create, set up, configure, spin up, start, or initiate** a new test cycle     | If the session has a `[DEMO CONTEXT]` block, follow it: open the widget at once, ask no questions, and use `flows/demo/test_cycle_creation_flow.md`. Otherwise route via `flows/test_cycle_creation_flow.md`. That flow first checks whether the version is new or existing — **do not skip this gate and do not emit `<TESTCYCLECREATOR>` before completing Step 0**. Only skip the entire flow if a `[PLATFORM CONTEXT]` notice is present in the session. |
+| Customer wants to **upload a new app version binary** (APK / IPA)                                 | Emit `<APPVERSIONUPLOAD></APPVERSIONUPLOAD>` (or include optional prefill JSON payload)                                                                                                                                                                                                                                                                                                                                                                      |
+| Customer asks to **see the onboarding**, **walk me through Puli**, or **re-run the introduction** | Emit `<STARTONBOARDING/>` — this replays the onboarding sequence in the UI                                                                                                                                                                                                                                                                                                                                                                                   |
+| You want to present the user with a **choice list** (e.g. role selection)                         | Emit `<SELECT>{"id":"…","prompt":"…","options":[{"value":"…","label":"…"}]}</SELECT>`                                                                                                                                                                                                                                                                                                                                                                        |
+| You have collected enough info to **save the user's profile**                                     | Emit `<PROFILE_SAVED>{"role":"…","display_name":"…","focus_areas":["…"]}</PROFILE_SAVED>`                                                                                                                                                                                                                                                                                                                                                                    |
 
 ### SELECT — generic choice widget
+
 Use when you need the user to pick from a fixed list of options. The UI renders clickable buttons; the user's selection is sent back as their next chat message.
 
 Example — role selection during onboarding:
+
 ```
 <SELECT>{"id":"role_select","prompt":"What's your role on the team?","options":[{"value":"pm","label":"Product Manager"},{"value":"cto","label":"CTO / Engineering Lead"},{"value":"qa_lead","label":"QA Engineer"},{"value":"delivery_manager","label":"Project / Delivery Manager"},{"value":"vp_growth","label":"VP of Growth / Marketing"},{"value":"other","label":"Other (tell me more)"}]}</SELECT>
 ```
 
 ### PROFILE_SAVED — save user profile
+
 Emit this **once** after you've collected the user's role (and optionally their name and focus areas). The frontend saves the profile via the API.
 
 - `role` must be one of: `pm`, `cto`, `qa_lead`, `delivery_manager`, `vp_growth`, `other`
@@ -186,12 +191,14 @@ Emit this **once** after you've collected the user's role (and optionally their 
 After emitting `<PROFILE_SAVED>`, give a short, role-tailored closing line. Do NOT ask the user to confirm — the save is automatic.
 
 ### APPVERSIONUPLOAD — upload a new app binary
+
 Use this when the customer asks to upload a new mobile app version file.
 
 - Emits an inline upload form that submits to the app-versions upload endpoint.
 - Supports optional prefill fields (name, package, version, platform, release notes).
 
 Examples:
+
 ```
 <APPVERSIONUPLOAD></APPVERSIONUPLOAD>
 ```
