@@ -262,12 +262,18 @@ function mockPrimaryErrorThenFallbackSuccess(errorMessage: string) {
   });
 }
 
-function expectOpenAiThenGroqAttemptOrder(params?: { expectOpenAiAuthProfileId?: string }) {
-  expect(runEmbeddedAttemptMock).toHaveBeenCalledTimes(2);
+function expectOpenAiThenGroqAttemptOrder(params?: {
+  expectOpenAiAuthProfileId?: string;
+  openAiAttempts?: number;
+}) {
+  const openAiAttempts = params?.openAiAttempts ?? 1;
+  expect(runEmbeddedAttemptMock).toHaveBeenCalledTimes(openAiAttempts + 1);
   const firstCall = runEmbeddedAttemptMock.mock.calls[0]?.[0] as
     | { provider?: string; authProfileId?: string }
     | undefined;
-  const secondCall = runEmbeddedAttemptMock.mock.calls[1]?.[0] as { provider?: string } | undefined;
+  const secondCall = runEmbeddedAttemptMock.mock.calls[openAiAttempts]?.[0] as
+    | { provider?: string }
+    | undefined;
   expect(firstCall).toBeDefined();
   expect(secondCall).toBeDefined();
   expect(firstCall?.provider).toBe("openai");
@@ -318,9 +324,10 @@ describe("runWithModelFallback + runEmbeddedPiAgent overload policy", () => {
       expect(usageStats["openai:p1"]?.failureCounts).toMatchObject({ overloaded: 1 });
       expect(typeof usageStats["groq:p1"]?.lastUsed).toBe("number");
 
-      expectOpenAiThenGroqAttemptOrder();
+      // Two same-model retries on openai, then the overload backoff before fallback.
+      expectOpenAiThenGroqAttemptOrder({ openAiAttempts: 3 });
       expect(computeBackoffMock).toHaveBeenCalledTimes(1);
-      expect(sleepWithAbortMock).toHaveBeenCalledTimes(1);
+      expect(sleepWithAbortMock).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -355,9 +362,10 @@ describe("runWithModelFallback + runEmbeddedPiAgent overload policy", () => {
       expect(usageStats["openai:p1"]?.disabledUntil).toBeUndefined();
       expect(usageStats["groq:p1"]?.disabledUntil).toBeUndefined();
 
-      expect(runEmbeddedAttemptMock).toHaveBeenCalledTimes(2);
+      // Three same-model attempts per provider; two retry sleeps plus one overload backoff each.
+      expect(runEmbeddedAttemptMock).toHaveBeenCalledTimes(6);
       expect(computeBackoffMock).toHaveBeenCalledTimes(2);
-      expect(sleepWithAbortMock).toHaveBeenCalledTimes(2);
+      expect(sleepWithAbortMock).toHaveBeenCalledTimes(6);
     });
   });
 
@@ -442,8 +450,10 @@ describe("runWithModelFallback + runEmbeddedPiAgent overload policy", () => {
       const usageStats = await readUsageStats(agentDir);
       expect(usageStats["openai:p1"]?.cooldownUntil).toBeUndefined();
       expect(usageStats["openai:p1"]?.failureCounts).toBeUndefined();
+      // Two same-model retry sleeps; no overload backoff in the timeout lane.
       expect(computeBackoffMock).not.toHaveBeenCalled();
-      expect(sleepWithAbortMock).not.toHaveBeenCalled();
+      expect(sleepWithAbortMock).toHaveBeenCalledTimes(2);
+      expectOpenAiThenGroqAttemptOrder({ openAiAttempts: 3 });
     });
   });
 

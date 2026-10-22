@@ -7,8 +7,10 @@ import {
   isAuthErrorMessage,
   isAuthPermanentErrorMessage,
   isBillingErrorMessage,
+  isNonRetryableProviderErrorMessage,
   isOverloadedErrorMessage,
   isPeriodicUsageLimitErrorMessage,
+  isProviderServerErrorMessage,
   isRateLimitErrorMessage,
   isTimeoutErrorMessage,
   matchesFormatErrorPattern,
@@ -998,6 +1000,9 @@ export function classifyFailoverReason(raw: string): FailoverReason | null {
   if (isJsonApiInternalServerError(raw)) {
     return "timeout";
   }
+  if (isProviderServerErrorMessage(raw)) {
+    return "timeout";
+  }
   if (isCloudCodeAssistFormatError(raw)) {
     return "format";
   }
@@ -1014,6 +1019,35 @@ export function classifyFailoverReason(raw: string): FailoverReason | null {
     return "auth";
   }
   return null;
+}
+
+/**
+ * True when resending the same request to the same model may succeed: a transient
+ * server, timeout, overload or throttling failure, and not a request-side or quota
+ * failure.
+ */
+export function isSameModelRetryableError(raw: string): boolean {
+  if (!raw || isNonRetryableProviderErrorMessage(raw)) {
+    return false;
+  }
+  const reason = classifyFailoverReason(raw);
+  return reason === "timeout" || reason === "overloaded" || reason === "rate_limit";
+}
+
+const RETRY_AFTER_RE =
+  /retry[- _]?after["']?\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(ms|milliseconds?|s|sec(?:onds?)?)?/i;
+
+/** Retry-after hint in milliseconds when the error text carries one. */
+export function extractRetryAfterMs(raw: string): number | undefined {
+  const match = raw.match(RETRY_AFTER_RE);
+  if (!match) {
+    return undefined;
+  }
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+  return match[2]?.toLowerCase().startsWith("m") ? value : value * 1000;
 }
 
 export function isFailoverErrorMessage(raw: string): boolean {
