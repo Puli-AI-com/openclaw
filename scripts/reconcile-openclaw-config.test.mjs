@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createOpenClawRuntimeConfig } from "./reconcile-openclaw-config.mjs";
+import { addTenantSkillsDir, createOpenClawRuntimeConfig } from "./reconcile-openclaw-config.mjs";
 
 const requiredHooks = {
   enabled: true,
@@ -237,4 +237,102 @@ void test("runtime config permissions remain private", async (t) => {
 
   assert.equal((await fs.stat(paths.runtimeConfigPath)).mode & 0o777, 0o600);
   assert.equal(await fs.readFile(paths.tenantOverridesPath, "utf8"), "{}\n");
+});
+
+const sharedSkillsDir = "/app/envoy-tools/skills";
+const tenantSkillsRoot = "/app/envoy-tools/skills/tenants";
+
+function fakeTenantFolders(...folders) {
+  return {
+    stat: async (target) => {
+      if (!folders.includes(target)) {
+        throw Object.assign(new Error(`ENOENT: ${target}`), { code: "ENOENT" });
+      }
+      return { isDirectory: () => true };
+    },
+  };
+}
+
+function sharedConfig() {
+  return { skills: { load: { extraDirs: [sharedSkillsDir] } } };
+}
+
+void test("adds the running tenant's skills folder after the shared dir", async () => {
+  const folder = `${tenantSkillsRoot}/bit2c`;
+  const config = await addTenantSkillsDir(
+    sharedConfig(),
+    { PULI_TENANT_ID: "bit2c" },
+    fakeTenantFolders(folder),
+  );
+
+  assert.deepEqual(config.skills.load.extraDirs, [sharedSkillsDir, folder]);
+});
+
+void test("leaves the list alone when the tenant has no skills folder", async () => {
+  const config = await addTenantSkillsDir(
+    sharedConfig(),
+    { PULI_TENANT_ID: "bit2c" },
+    fakeTenantFolders(),
+  );
+
+  assert.deepEqual(config.skills.load.extraDirs, [sharedSkillsDir]);
+});
+
+void test("adds nothing for a missing or malformed tenant id", async () => {
+  const fileSystem = fakeTenantFolders(
+    `${tenantSkillsRoot}/Bit2C`,
+    `${tenantSkillsRoot}/..`,
+    `${tenantSkillsRoot}/a/b`,
+    `${tenantSkillsRoot}/`,
+  );
+  for (const env of [
+    {},
+    { PULI_TENANT_ID: "" },
+    { PULI_TENANT_ID: "Bit2C" },
+    { PULI_TENANT_ID: ".." },
+    { PULI_TENANT_ID: "a/b" },
+  ]) {
+    const config = await addTenantSkillsDir(sharedConfig(), env, fileSystem);
+    assert.deepEqual(config.skills.load.extraDirs, [sharedSkillsDir], JSON.stringify(env));
+  }
+});
+
+void test("never adds another tenant's skills folder", async () => {
+  const config = await addTenantSkillsDir(
+    sharedConfig(),
+    { PULI_TENANT_ID: "test" },
+    fakeTenantFolders(`${tenantSkillsRoot}/bit2c`),
+  );
+
+  assert.deepEqual(config.skills.load.extraDirs, [sharedSkillsDir]);
+});
+
+void test("tenant overrides cannot add a skills path, the image adds only the tenant's own", async (t) => {
+  const folder = `${tenantSkillsRoot}/bit2c`;
+  const paths = await fixture(t, {
+    overrides: JSON.stringify({
+      skills: { load: { extraDirs: ["/tenant/path", `${tenantSkillsRoot}/test`] } },
+    }),
+  });
+  const fileSystem = { ...fs, stat: fakeTenantFolders(folder).stat };
+
+  await createOpenClawRuntimeConfig({
+    ...paths,
+    env: { ...paths.env, PULI_TENANT_ID: "bit2c" },
+    fileSystem,
+  });
+  const runtime = JSON.parse(await fs.readFile(paths.runtimeConfigPath, "utf8"));
+
+  assert.deepEqual(runtime.skills.load.extraDirs, [sharedSkillsDir, folder]);
+});
+
+void test("does not duplicate the tenant folder on a second run", async () => {
+  const folder = `${tenantSkillsRoot}/bit2c`;
+  const env = { PULI_TENANT_ID: "bit2c" };
+  const fileSystem = fakeTenantFolders(folder);
+
+  const once = await addTenantSkillsDir(sharedConfig(), env, fileSystem);
+  const twice = await addTenantSkillsDir(once, env, fileSystem);
+
+  assert.deepEqual(twice.skills.load.extraDirs, [sharedSkillsDir, folder]);
 });

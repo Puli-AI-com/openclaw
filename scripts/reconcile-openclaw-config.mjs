@@ -11,6 +11,45 @@ import {
   writeFileAtomic,
 } from "./config-state-separation.mjs";
 
+const TENANT_ID_PATTERN = /^[a-z0-9-]+$/;
+const DEFAULT_TENANT_SKILLS_ROOT = "/app/envoy-tools/skills/tenants";
+
+// Load only the running tenant's own customer skills. The path is added after the
+// image-owned entries, so tenant overrides still cannot add one.
+export async function addTenantSkillsDir(
+  config,
+  env = process.env,
+  fileSystem = fs,
+  tenantSkillsRoot = DEFAULT_TENANT_SKILLS_ROOT,
+) {
+  const tenantId = env.PULI_TENANT_ID?.trim();
+  if (!tenantId || !TENANT_ID_PATTERN.test(tenantId)) {
+    return config;
+  }
+  const tenantDir = path.posix.join(tenantSkillsRoot, tenantId);
+  try {
+    if (!(await fileSystem.stat(tenantDir)).isDirectory()) {
+      return config;
+    }
+  } catch (error) {
+    if (error?.code === "ENOENT" || error?.code === "ENOTDIR") {
+      return config;
+    }
+    throw error;
+  }
+  const extraDirs = config.skills?.load?.extraDirs ?? [];
+  if (extraDirs.includes(tenantDir)) {
+    return config;
+  }
+  return {
+    ...config,
+    skills: {
+      ...config.skills,
+      load: { ...config.skills?.load, extraDirs: [...extraDirs, tenantDir] },
+    },
+  };
+}
+
 export async function createOpenClawRuntimeConfig({
   tenantOverridesPath,
   runtimeConfigPath,
@@ -42,7 +81,11 @@ export async function createOpenClawRuntimeConfig({
     const overrideBytes = await fileSystem.readFile(overridesPath);
     const defaults = parseConfigObject(defaultBytes.toString("utf8"), "default OpenClaw config");
     const overrides = parseConfigObject(overrideBytes.toString("utf8"), "tenant overrides");
-    const runtimeConfig = buildEffectiveConfig(defaults, overrides);
+    const runtimeConfig = await addTenantSkillsDir(
+      buildEffectiveConfig(defaults, overrides),
+      env,
+      fileSystem,
+    );
     const runtimeBytes = Buffer.from(`${JSON.stringify(runtimeConfig, null, 2)}\n`);
 
     await beforePublish?.();
