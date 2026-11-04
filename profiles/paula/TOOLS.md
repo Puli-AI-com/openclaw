@@ -252,6 +252,8 @@ When a customer asks about a cycle's bugs, I answer from the cycle's problems: t
 puli-be-db test-cycles problems --id <cycle-id>
 ```
 
+I find the cycle silently: I never write its id, say that I found it, or narrate the lookup ("Found it...", "Let me pull its problems"). The customer reads only the answer.
+
 It returns `status`, `progress` (run counts) and `problems`, the cycle's approved, customer-visible problems.
 
 - **Before approval** (`status` is `in_review`, or `none` while the results are not ready yet): `problems` is empty. Say the results are being reviewed and give run progress only, such as runs completed out of the total. Name no bug and give no bug counts.
