@@ -34,6 +34,22 @@ describe("Paula's TOOLS.md", () => {
 
   it("finds the cycle silently, without its id or a narrated lookup", () => {
     expect(tools).toContain("I find the cycle silently: I never write its id");
+    expect(tools).toContain("I write nothing before or between my lookups");
+    expect(tools).toMatch(/The same holds in a follow-up, when I look the cycle up again/);
+  });
+
+  it("shows a problem in its card in follow-ups too, never in a table", () => {
+    expect(tools).toMatch(
+      /follow-ups included: when I describe a problem I already read earlier in the chat, the reply still carries its `<BUGCARD>`/,
+    );
+    expect(tools).toMatch(/never in a markdown table or a plain-text list of their fields/);
+  });
+
+  it("asked for raw bugs, says it shares the reviewed problems instead", () => {
+    expect(tools).toMatch(
+      /I say in one sentence that I share the problems Puli's reviewers approved, not the testers' individual reports/,
+    );
+    expect(tools).toMatch(/I never call the problems the bugs the testers filed/);
   });
 
   it("before approval gives run progress only", () => {
