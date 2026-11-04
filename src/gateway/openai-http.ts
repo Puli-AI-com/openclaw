@@ -512,6 +512,31 @@ export async function handleOpenAiHttpRequest(
   let wroteRole = false;
   let sawAssistantDelta = false;
   let closed = false;
+  // Assistant text is held until the run ends: text written before a tool call is the agent
+  // narrating its own steps ("Let me look that up"), not the reply, so a tool start drops it.
+  let pendingText = "";
+  let droppedText = "";
+
+  // Sends the reply: the text after the last tool call, or, when there is none, the text
+  // dropped last, so the caller never gets an empty reply.
+  const flushPendingText = () => {
+    const content = pendingText || droppedText;
+    pendingText = "";
+    droppedText = "";
+    if (!content) {
+      return;
+    }
+    if (!wroteRole) {
+      wroteRole = true;
+      writeAssistantRoleChunk(res, { runId, model });
+    }
+    writeAssistantContentChunk(res, {
+      runId,
+      model,
+      content,
+      finishReason: null,
+    });
+  };
 
   const unsubscribe = onAgentEvent((evt) => {
     if (evt.runId !== runId) {
@@ -527,18 +552,16 @@ export async function handleOpenAiHttpRequest(
         return;
       }
 
-      if (!wroteRole) {
-        wroteRole = true;
-        writeAssistantRoleChunk(res, { runId, model });
-      }
-
       sawAssistantDelta = true;
-      writeAssistantContentChunk(res, {
-        runId,
-        model,
-        content,
-        finishReason: null,
-      });
+      pendingText += content;
+      return;
+    }
+
+    if (evt.stream === "tool" && evt.data?.phase === "start") {
+      if (pendingText) {
+        droppedText = pendingText;
+        pendingText = "";
+      }
       return;
     }
 
@@ -547,6 +570,7 @@ export async function handleOpenAiHttpRequest(
       if (phase === "end" || phase === "error") {
         closed = true;
         unsubscribe();
+        flushPendingText();
         writeDone(res);
         res.end();
       }
@@ -566,7 +590,9 @@ export async function handleOpenAiHttpRequest(
         return;
       }
 
-      if (!sawAssistantDelta) {
+      if (sawAssistantDelta) {
+        flushPendingText();
+      } else {
         if (!wroteRole) {
           wroteRole = true;
           writeAssistantRoleChunk(res, { runId, model });

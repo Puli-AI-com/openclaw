@@ -747,4 +747,61 @@ describe("OpenAI-compatible HTTP API (e2e)", () => {
       // shared server
     }
   });
+
+  it("streams only the text after the last tool call", async () => {
+    const port = enabledPort;
+    const streamedContent = async (
+      events: Array<{ stream: string; data: Record<string, unknown> }>,
+    ) => {
+      agentCommand.mockClear();
+      agentCommand.mockImplementationOnce((async (opts: unknown) => {
+        const runId = (opts as { runId?: string } | undefined)?.runId ?? "";
+        for (const evt of events) {
+          emitAgentEvent({ runId, ...evt });
+        }
+        return { payloads: [{ text: "unused" }] };
+      }) as never);
+
+      const res = await postChatCompletions(port, {
+        stream: true,
+        model: "openclaw",
+        messages: [{ role: "user", content: "Which bugs did the cycle find?" }],
+      });
+      expect(res.status).toBe(200);
+      const data = parseSseDataLines(await res.text());
+      expect(data[data.length - 1]).toBe("[DONE]");
+      return data
+        .filter((d) => d !== "[DONE]")
+        .map((d) => JSON.parse(d) as Record<string, unknown>)
+        .flatMap((c) => (c.choices as Array<Record<string, unknown>> | undefined) ?? [])
+        .map((choice) => (choice.delta as Record<string, unknown> | undefined)?.content)
+        .filter((v): v is string => typeof v === "string")
+        .join("");
+    };
+    const toolStart = (toolCallId: string) => ({
+      stream: "tool",
+      data: { phase: "start", name: "exec", toolCallId },
+    });
+
+    // Narration before each lookup is dropped; the answer after the last one is sent.
+    expect(
+      await streamedContent([
+        { stream: "assistant", data: { delta: "Found the cycle. " } },
+        { stream: "assistant", data: { delta: "Let me pull its problems." } },
+        toolStart("t1"),
+        { stream: "assistant", data: { delta: "Now its progress." } },
+        toolStart("t2"),
+        { stream: "assistant", data: { delta: "The cycle found " } },
+        { stream: "assistant", data: { delta: "two problems." } },
+      ]),
+    ).toBe("The cycle found two problems.");
+
+    // Nothing after the last lookup: the text dropped last is sent, never an empty reply.
+    expect(
+      await streamedContent([
+        { stream: "assistant", data: { delta: "I started the cycle." } },
+        toolStart("t1"),
+      ]),
+    ).toBe("I started the cycle.");
+  });
 });
