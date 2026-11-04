@@ -39,10 +39,17 @@ describe("Paula's TOOLS.md", () => {
   });
 
   it("shows a problem in its card in follow-ups too, never in a table", () => {
-    expect(tools).toMatch(
-      /follow-ups included: when I describe a problem I already read earlier in the chat, the reply still carries its `<BUGCARD>`/,
+    expect(tools).toMatch(/This holds for every reply about problems, a follow-up question too/);
+    expect(tools).toMatch(/never as a markdown table or a plain-text list of their fields/);
+  });
+
+  it("never says where its information came from", () => {
+    expect(tools).toContain(
+      "I never tell the customer where my information came from or how I got it",
     );
-    expect(tools).toMatch(/never in a markdown table or a plain-text list of their fields/);
+    expect(tools).toMatch(/the reply starts with the answer/);
+    // Wording she repeated to customers (PUL-391 verify): the rule must not hand it to her.
+    expect(tools).not.toMatch(/already read earlier in the chat/);
   });
 
   it("asked for raw bugs, says it shares the reviewed problems instead", () => {
