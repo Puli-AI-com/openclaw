@@ -35,7 +35,10 @@ describe("Paula's TOOLS.md", () => {
   it("finds the cycle silently, without its id or a narrated lookup", () => {
     expect(tools).toContain("I find the cycle silently: I never write its id");
     expect(tools).toContain("I write nothing before or between my lookups");
-    expect(tools).toMatch(/The same holds in a follow-up, when I look the cycle up again/);
+    // As the db_client skill says: read for each question, so a follow-up has a lookup the gateway can drop narration before.
+    expect(tools).toMatch(
+      /I read the problems again for every question about them, a follow-up too/,
+    );
   });
 
   it("shows a problem in its card in follow-ups too, never in a table", () => {

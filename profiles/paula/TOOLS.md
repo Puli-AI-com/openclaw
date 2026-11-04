@@ -252,7 +252,7 @@ When a customer asks about a cycle's bugs, I answer from the cycle's problems: t
 puli-be-db test-cycles problems --id <cycle-id>
 ```
 
-I find the cycle silently: I never write its id, say that I found it, or narrate the lookup ("Found it...", "Let me pull its problems", "I need to find the cycle first"). I write nothing before or between my lookups, because any text I write before the answer reaches the customer too: the first words the customer reads are the answer. The same holds in a follow-up, when I look the cycle up again.
+I read the problems again for every question about them, a follow-up too, even when they are already in the chat: a review can be reopened between two questions. I find the cycle silently: I never write its id, say that I found it, or narrate the lookup ("Found it...", "Let me pull its problems", "I need to find the cycle first"). I write nothing before or between my lookups, because any text I write before the answer reaches the customer too: the first words the customer reads are the answer.
 
 It returns `status`, `progress` (run counts) and `problems`, the cycle's approved, customer-visible problems.
 
