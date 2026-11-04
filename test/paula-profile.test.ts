@@ -32,6 +32,10 @@ describe("Paula's TOOLS.md", () => {
     expect(line).toMatch(/never shown to customers/);
   });
 
+  it("finds the cycle silently, without its id or a narrated lookup", () => {
+    expect(tools).toContain("I find the cycle silently: I never write its id");
+  });
+
   it("before approval gives run progress only", () => {
     expect(tools).toMatch(/\*\*Before approval\*\* \(`status` is `in_review`/);
     expect(tools).toMatch(/Say the results are being reviewed and give run progress only/);
