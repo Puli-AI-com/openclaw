@@ -35,14 +35,24 @@ describe("Paula's TOOLS.md", () => {
   it("finds the cycle silently, without its id or a narrated lookup", () => {
     expect(tools).toContain("I find the cycle silently: I never write its id");
     expect(tools).toContain("I write nothing before or between my lookups");
-    expect(tools).toMatch(/The same holds in a follow-up, when I look the cycle up again/);
+    // As the db_client skill says: read for each question, so a follow-up has a lookup the gateway can drop narration before.
+    expect(tools).toMatch(
+      /I read the problems again for every question about them, a follow-up too/,
+    );
   });
 
   it("shows a problem in its card in follow-ups too, never in a table", () => {
-    expect(tools).toMatch(
-      /follow-ups included: when I describe a problem I already read earlier in the chat, the reply still carries its `<BUGCARD>`/,
+    expect(tools).toMatch(/This holds for every reply about problems, a follow-up question too/);
+    expect(tools).toMatch(/never as a markdown table or a plain-text list of their fields/);
+  });
+
+  it("never says where its information came from", () => {
+    expect(tools).toContain(
+      "I never tell the customer where my information came from or how I got it",
     );
-    expect(tools).toMatch(/never in a markdown table or a plain-text list of their fields/);
+    expect(tools).toMatch(/the reply starts with the answer/);
+    // Wording she repeated to customers (PUL-391 verify): the rule must not hand it to her.
+    expect(tools).not.toMatch(/already read earlier in the chat/);
   });
 
   it("asked for raw bugs, says it shares the reviewed problems instead", () => {
