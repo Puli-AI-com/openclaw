@@ -1,0 +1,10 @@
+{
+  "id": "puli-discovery",
+  "name": "Puli Discovery",
+  "description": "The discovery executor's only tools: observe, replay, act and report on one leased device, through the application-discovery device helpers.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

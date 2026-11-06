@@ -164,6 +164,10 @@
       "types": "./dist/plugin-sdk/phone-control.d.ts",
       "default": "./dist/plugin-sdk/phone-control.js"
     },
+    "./plugin-sdk/puli-discovery": {
+      "types": "./dist/plugin-sdk/puli-discovery.d.ts",
+      "default": "./dist/plugin-sdk/puli-discovery.js"
+    },
     "./plugin-sdk/qwen-portal-auth": {
       "types": "./dist/plugin-sdk/qwen-portal-auth.d.ts",
       "default": "./dist/plugin-sdk/qwen-portal-auth.js"

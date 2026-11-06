@@ -85,6 +85,8 @@ const requiredPathGroups = [
   "dist/plugin-sdk/open-prose.d.ts",
   "dist/plugin-sdk/phone-control.js",
   "dist/plugin-sdk/phone-control.d.ts",
+  "dist/plugin-sdk/puli-discovery.js",
+  "dist/plugin-sdk/puli-discovery.d.ts",
   "dist/plugin-sdk/qwen-portal-auth.js",
   "dist/plugin-sdk/qwen-portal-auth.d.ts",
   "dist/plugin-sdk/synology-chat.js",
