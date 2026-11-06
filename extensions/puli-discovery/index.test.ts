@@ -6,8 +6,9 @@ import type {
   OpenClawPluginApi,
   OpenClawPluginToolFactory,
 } from "openclaw/plugin-sdk/puli-discovery";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import plugin, { DISCOVERY_TOOL_NAMES, EXECUTOR_AGENT_ID } from "./index.js";
+import { NOT_CONFIGURED, TOOLS_LINE } from "./src/executor-prompt.js";
 import { resetRunBindingsForTests } from "./src/run-binding.js";
 
 type Handler = (event: Record<string, unknown>, ctx: Record<string, unknown>) => unknown;
@@ -15,7 +16,9 @@ type Handler = (event: Record<string, unknown>, ctx: Record<string, unknown>) =>
 function registerPlugin() {
   const factories: Array<{ factory: OpenClawPluginToolFactory; names?: string[] }> = [];
   const hooks = new Map<string, Handler>();
+  const errors: string[] = [];
   const api = {
+    logger: { info() {}, warn() {}, debug() {}, error: (message: string) => errors.push(message) },
     registerTool: (tool: OpenClawPluginToolFactory, opts?: { names?: string[] }) => {
       factories.push({ factory: tool, names: opts?.names });
     },
@@ -24,13 +27,90 @@ function registerPlugin() {
     },
   } as unknown as OpenClawPluginApi;
   plugin.register(api);
-  return { factories, hooks };
+  return { factories, hooks, errors };
 }
 
 const executorKey = `agent:${EXECUTOR_AGENT_ID}:subagent:abc`;
 
+const INSTRUCTIONS = "You are a discovery executor. Replay, act, observe, report.";
+let rampupHome = "";
+
 describe("puli-discovery plugin", () => {
-  afterEach(() => resetRunBindingsForTests());
+  beforeAll(async () => {
+    rampupHome = await fs.mkdtemp(path.join(os.tmpdir(), "puli-discovery-home-"));
+    const folder = path.join(rampupHome, "application-discovery", "discovery-executor");
+    await fs.mkdir(folder, { recursive: true });
+    await fs.writeFile(path.join(folder, "INSTRUCTIONS.md"), `${INSTRUCTIONS}\n`);
+  });
+
+  afterAll(async () => {
+    await fs.rm(rampupHome, { recursive: true, force: true });
+  });
+
+  beforeEach(() => {
+    vi.stubEnv("RAMPUP_HOME", rampupHome);
+  });
+
+  afterEach(() => {
+    resetRunBindingsForTests();
+    vi.unstubAllEnvs();
+  });
+
+  it("replaces the executor's whole system prompt with its instructions and the tools line", async () => {
+    const { hooks } = registerPlugin();
+    const result = (await hooks.get("before_prompt_build")?.(
+      { prompt: "[Subagent Task]: DISCOVERY_RUN=/r/run.yaml", messages: [] },
+      { agentId: EXECUTOR_AGENT_ID, sessionKey: executorKey },
+    )) as { systemPrompt?: string };
+    expect(result.systemPrompt).toBe(`${INSTRUCTIONS}\n\n${TOOLS_LINE}`);
+  });
+
+  it("leaves every other agent's prompt alone", async () => {
+    const { hooks } = registerPlugin();
+    for (const agentId of ["paula", "main", undefined]) {
+      const result = await hooks.get("before_prompt_build")?.(
+        { prompt: "hello", messages: [] },
+        { agentId, sessionKey: "hook:rampup:discover:1" },
+      );
+      expect(result).toBeUndefined();
+    }
+  });
+
+  it("ends the executor's run with the reason when its instructions are missing", async () => {
+    vi.stubEnv("RAMPUP_HOME", path.join(rampupHome, "nowhere"));
+    const { hooks, factories, errors } = registerPlugin();
+    const result = (await hooks.get("before_prompt_build")?.(
+      { prompt: "x", messages: [] },
+      { agentId: EXECUTOR_AGENT_ID, sessionKey: executorKey },
+    )) as { systemPrompt?: string };
+    const missing = path.join(
+      rampupHome,
+      "nowhere",
+      "application-discovery",
+      "discovery-executor",
+      "INSTRUCTIONS.md",
+    );
+    expect(result.systemPrompt).toContain(`${NOT_CONFIGURED}: `);
+    expect(result.systemPrompt).toContain(`${missing} is missing`);
+    expect(result.systemPrompt).toContain("Do not call any tool.");
+    expect(errors.join("\n")).toContain(missing);
+
+    const tools = factories[0].factory({
+      agentId: EXECUTOR_AGENT_ID,
+      sessionKey: executorKey,
+    }) as AnyAgentTool[];
+    for (const tool of tools) {
+      await expect(
+        tool.execute("c", {
+          instruction_id: "i-1",
+          device_id: "dev-1",
+          page_id: "p",
+          action: "back",
+          markdown: "x",
+        }),
+      ).rejects.toThrow(`no device action: the discovery executor's instructions ${missing}`);
+    }
+  });
 
   it("registers the four tools, required, under their names", () => {
     const { factories } = registerPlugin();

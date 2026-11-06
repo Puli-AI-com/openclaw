@@ -38,6 +38,8 @@ export type DiscoveryToolDeps = {
   runFor: (sessionKey: string | undefined) => string | undefined;
   runHelper?: HelperRunner;
   env?: NodeJS.ProcessEnv;
+  /** Throws when the executor may not act at all (its instructions are missing). */
+  ready?: () => Promise<void>;
 };
 
 type ToolResult = Awaited<ReturnType<AnyAgentTool["execute"]>>;
@@ -294,6 +296,7 @@ export function createDiscoveryTools(
   ): Promise<ToolResult> {
     const instructionId = stringParam(params, "instruction_id");
     const deviceId = stringParam(params, "device_id");
+    await deps.ready?.();
     const runPath = await leasedRun(deps.runFor(ctx.sessionKey), instructionId, deviceId);
     const cwd = path.dirname(runPath);
     const run = await runHelper({
@@ -411,6 +414,7 @@ export function createDiscoveryTools(
       const instructionId = stringParam(params, "instruction_id");
       const deviceId = stringParam(params, "device_id");
       const markdown = typeof params.markdown === "string" ? params.markdown : "";
+      await deps.ready?.();
       const runPath = await leasedRun(deps.runFor(ctx.sessionKey), instructionId, deviceId);
       if (!INSTRUCTION_ID.test(instructionId)) {
         throw new DiscoveryToolError(
