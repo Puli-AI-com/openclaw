@@ -242,14 +242,14 @@ function optionalString(params: Record<string, unknown>, key: string): string | 
 }
 
 /** The command line for one device-helper call. Values go as `--flag=value`, so a dummy
- * text that starts with a dash is never read as an option. */
+ * text that starts with a dash is never read as an option; `true` is a bare `--flag`. */
 export function helperArgv(
   env: NodeJS.ProcessEnv,
   command: "observe" | "replay" | "act",
   runPath: string,
   deviceId: string,
   instructionId: string,
-  extra: Array<[string, string | undefined]>,
+  extra: Array<[string, string | true | undefined]>,
 ): string[] {
   const { project, script } = discoveryProject(env);
   const argv = [
@@ -265,7 +265,9 @@ export function helperArgv(
     `--instruction=${instructionId}`,
   ];
   for (const [flag, value] of extra) {
-    if (value !== undefined) {
+    if (value === true) {
+      argv.push(`--${flag}`);
+    } else if (value !== undefined) {
       argv.push(`--${flag}=${value}`);
     }
   }
@@ -287,7 +289,7 @@ export function createDiscoveryTools(
   async function callHelper(
     command: "observe" | "replay" | "act",
     params: Record<string, unknown>,
-    extra: Array<[string, string | undefined]>,
+    extra: Array<[string, string | true | undefined]>,
     signal?: AbortSignal,
   ): Promise<ToolResult> {
     const instructionId = stringParam(params, "instruction_id");
@@ -343,7 +345,17 @@ export function createDiscoveryTools(
     }),
     execute: async (_id, args, signal) => {
       const params = args as Record<string, unknown>;
-      return await callHelper("replay", params, [["page", stringParam(params, "page_id")]], signal);
+      // --executor: an executor's replay is not recorded on the page; only the lead's own
+      // replay is (lead_state.record_replay), as discovery_mcp.py does.
+      return await callHelper(
+        "replay",
+        params,
+        [
+          ["page", stringParam(params, "page_id")],
+          ["executor", true],
+        ],
+        signal,
+      );
     },
   };
 

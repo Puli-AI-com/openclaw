@@ -134,7 +134,7 @@ describe("discovery tools", () => {
     ]);
   });
 
-  it("maps replay's page id to --page", async () => {
+  it("maps replay's page id to --page and marks it an executor's replay", async () => {
     const { replay } = tools(ok({ landed: true }));
     await replay.execute("c", { instruction_id: "i-1", device_id: "dev-1", page_id: "login" });
     expect(helperArgs(calls[0])).toEqual([
@@ -143,6 +143,7 @@ describe("discovery tools", () => {
       "--device=dev-1",
       "--instruction=i-1",
       "--page=login",
+      "--executor",
     ]);
   });
 
