@@ -71,6 +71,7 @@
       {
         "id": "discovery-executor",
         "model": "litellm/gemini-3.1-flash-lite",
+        "skills": [],
         "tools": {
           "profile": "minimal",
           "alsoAllow": [

@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { resolveAgentSkillsFilter } from "../agents/agent-scope.js";
 import { resolveSubagentSpawnModelSelection } from "../agents/model-selection.js";
 import { createOpenClawCodingTools } from "../agents/pi-tools.js";
+import { buildWorkspaceSkillSnapshot } from "../agents/skills.js";
 import type { OpenClawConfig } from "./config.js";
 import { validateConfigObjectRaw } from "./validation.js";
 
@@ -88,6 +90,27 @@ describe("Puli image default config: discovery executor", () => {
         modelOverride: "litellm/claude-sonnet-4-6",
       }),
     ).toBe("litellm/claude-sonnet-4-6");
+  });
+
+  it("lists no skills in the executor's prompt, while Paula keeps hers", () => {
+    // A spawned executor runs in Paula's workspace; without `skills: []` its prompt would list
+    // her skills and tell it to read their SKILL.md, a tool it does not have.
+    const skillDir = path.join(workspaceDir, "skills", "demo-skill");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: demo-skill\ndescription: A skill only Paula should see.\n---\n\nBody.\n",
+    );
+    const config = loadDefaultConfig();
+    const snapshotFor = (agentId: string) =>
+      buildWorkspaceSkillSnapshot(workspaceDir, {
+        config,
+        skillFilter: resolveAgentSkillsFilter(config, agentId),
+      });
+
+    expect(resolveAgentSkillsFilter(config, "discovery-executor")).toEqual([]);
+    expect(snapshotFor("discovery-executor").prompt.trim()).toBe("");
+    expect(snapshotFor("paula").prompt).toContain("demo-skill");
   });
 
   it("lists flash-lite on the litellm provider with image input", () => {
