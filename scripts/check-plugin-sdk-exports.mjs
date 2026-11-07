@@ -73,6 +73,7 @@ const requiredSubpathEntries = [
   "nostr",
   "open-prose",
   "phone-control",
+  "puli-discovery",
   "qwen-portal-auth",
   "synology-chat",
   "talk-voice",

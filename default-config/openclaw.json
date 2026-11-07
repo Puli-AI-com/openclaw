@@ -39,6 +39,11 @@
             "input": ["text", "image"],
             "contextWindow": 200000,
             "maxTokens": 64000
+          },
+          {
+            "id": "gemini-3.1-flash-lite",
+            "name": "Gemini 3.1 Flash Lite (Vertex)",
+            "input": ["text", "image"]
           }
         ]
       }
@@ -57,7 +62,32 @@
       },
       "skipBootstrap": true
     },
-    "list": [{ "id": "paula", "default": true }]
+    "list": [
+      {
+        "id": "paula",
+        "default": true,
+        "subagents": { "allowAgents": ["discovery-executor"] }
+      },
+      {
+        "id": "discovery-executor",
+        "model": "litellm/gemini-3.1-flash-lite",
+        "skills": [],
+        "tools": {
+          "profile": "minimal",
+          "alsoAllow": [
+            "discovery_observe",
+            "discovery_replay",
+            "discovery_act",
+            "discovery_report"
+          ]
+        }
+      }
+    ]
+  },
+  "plugins": {
+    "entries": {
+      "puli-discovery": { "enabled": true }
+    }
   },
   "skills": {
     "load": {

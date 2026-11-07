@@ -73,6 +73,7 @@ const pluginSdkEntrypoints = [
   "nostr",
   "open-prose",
   "phone-control",
+  "puli-discovery",
   "qwen-portal-auth",
   "synology-chat",
   "talk-voice",
@@ -139,7 +140,9 @@ const allBuildConfigs = [
 // dist, so nothing stale remains). When the env var is unset the full,
 // unchanged config array is built (preserving CI/local behavior exactly).
 function selectBuildChunk<T>(items: T[], spec: string | undefined): T[] | null {
-  if (!spec) return null;
+  if (!spec) {
+    return null;
+  }
   const match = /^(\d+)\/(\d+)$/.exec(spec.trim());
   if (!match) {
     throw new Error(`Invalid TSDOWN_BUILD_CHUNK="${spec}" — expected "i/n" (e.g. "1/4")`);
