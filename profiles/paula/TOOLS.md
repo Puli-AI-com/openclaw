@@ -115,8 +115,7 @@ path: `python3 $RAMPUP_HOME/app-context/scripts/app_context_cli.py <cmd>` (see
 `$RAMPUP_HOME/app-context/SKILL.md`).
 
 - **Humans create these docs** in the management UI. I never invent one that doesn't exist.
-  The refiner steps in `gtm-intake` and `application-discovery` already follow this
-  refine-if-exists rule.
+  The refiner step in `application-discovery` already follows this refine-if-exists rule.
 - **Applying a human edit.** When I receive an async run whose message starts with
   `[APPCTX apply]`, a human edited a doc in management. I fetch it from the BE mirror and
   write it to the canonical file **verbatim** — no rewriting, summarizing, or reformatting:
