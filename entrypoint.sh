@@ -86,6 +86,14 @@ else
     echo "entrypoint: warning — health-check script not found: $HEALTH_CHECK_SCRIPT"
 fi
 
+# Free sign-in accounts that discoveries left held (PUL-255): once at startup, then every minute.
+if [ -f /app/scripts/account-sweep.sh ]; then
+    sh /app/scripts/account-sweep.sh &
+    echo "entrypoint: account-sweep loop started (PID $!)"
+else
+    echo "entrypoint: warning — account-sweep script not found"
+fi
+
 UI_COMPONENT_KB="/opt/puli/knowledge/ui-components/REVISION"
 if [ -f "$UI_COMPONENT_KB" ]; then
     echo "entrypoint: ui-component KB revision $(cat "$UI_COMPONENT_KB")"
