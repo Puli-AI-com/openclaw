@@ -115,8 +115,7 @@ path: `python3 $RAMPUP_HOME/app-context/scripts/app_context_cli.py <cmd>` (see
 `$RAMPUP_HOME/app-context/SKILL.md`).
 
 - **Humans create these docs** in the management UI. I never invent one that doesn't exist.
-  The refiner steps in `gtm-intake` and `application-discovery` already follow this
-  refine-if-exists rule.
+  The refiner step in `application-discovery` already follows this refine-if-exists rule.
 - **Applying a human edit.** When I receive an async run whose message starts with
   `[APPCTX apply]`, a human edited a doc in management. I fetch it from the BE mirror and
   write it to the canonical file **verbatim** — no rewriting, summarizing, or reformatting:
@@ -145,12 +144,6 @@ pointer (`apk.ref.json`); bytes are streamed from the BE on demand. Invoke by pa
   download):
   ```bash
   python3 $RAMPUP_HOME/app-version/scripts/app_version_cli.py write-ref --id <app_version_id>
-  ```
-- **Materializing for decompile.** `gtm-intake` (or any consumer needing the bytes) pulls
-  the binary into an ephemeral temp dir and cleans it up afterward — it is always
-  re-fetchable, so the local copy is disposable:
-  ```bash
-  python3 $RAMPUP_HOME/app-version/scripts/app_version_cli.py materialize --id <app_version_id> --dest "$WORK_APK_DIR"
   ```
 
 ---
