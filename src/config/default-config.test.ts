@@ -27,4 +27,18 @@ describe("Puli image default config", () => {
     expect(validateConfigObjectRaw(config)).toMatchObject({ ok: true });
     expect(config.agents?.defaults?.subagents?.archiveAfterMinutes).toBe(1440);
   });
+
+  it("runs Paula on Sonnet 5.5 and still lists Sonnet 4.6 for callers that name it", () => {
+    const config = JSON.parse(readFileSync(defaultConfigPath, "utf8")) as OpenClawConfig;
+    const models = config.models?.providers?.litellm?.models ?? [];
+
+    expect(config.agents?.defaults?.model).toEqual({ primary: "litellm/claude-sonnet-5-5" });
+    expect(models.find((model) => model.id === "claude-sonnet-5-5")).toMatchObject({
+      reasoning: true,
+      input: ["text", "image"],
+      maxTokens: 64000,
+    });
+    // The discovery lead names litellm/claude-sonnet-4-6 explicitly.
+    expect(models.map((model) => model.id)).toContain("claude-sonnet-4-6");
+  });
 });

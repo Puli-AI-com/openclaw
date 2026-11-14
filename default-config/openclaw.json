@@ -44,6 +44,14 @@
             "id": "gemini-3.1-flash-lite",
             "name": "Gemini 3.1 Flash Lite (Vertex)",
             "input": ["text", "image"]
+          },
+          {
+            "id": "claude-sonnet-5-5",
+            "name": "Claude Sonnet 5.5 (EU Bedrock)",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 200000,
+            "maxTokens": 64000
           }
         ]
       }
@@ -52,7 +60,7 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "litellm/claude-sonnet-4-6"
+        "primary": "litellm/claude-sonnet-5-5"
       },
       "heartbeat": {
         "every": "0m"
