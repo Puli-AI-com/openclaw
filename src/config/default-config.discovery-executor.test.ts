@@ -116,7 +116,11 @@ describe("Puli image default config: discovery executor", () => {
   it("lists flash-lite on the litellm provider with image input", () => {
     const models = loadDefaultConfig().models?.providers?.litellm?.models ?? [];
 
-    expect(models.map((model) => model.id)).toEqual(["claude-sonnet-4-6", "gemini-3.1-flash-lite"]);
+    expect(models.map((model) => model.id)).toEqual([
+      "claude-sonnet-4-6",
+      "gemini-3.1-flash-lite",
+      "claude-sonnet-5-5",
+    ]);
     expect(models.find((model) => model.id === "gemini-3.1-flash-lite")?.input).toEqual([
       "text",
       "image",
