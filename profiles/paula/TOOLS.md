@@ -154,7 +154,7 @@ path: `python3 $RAMPUP_HOME/app-context/scripts/app_context_cli.py <cmd>` (see
 
 Use when you need the user to pick from a fixed list of options. The UI renders clickable buttons; the user's selection is sent back as their next chat message.
 
-**Reading the answer.** The options are lettered in order: the first option is A, the second B, and so on. A click arrives as "{letter}. {label}"; the user may also type just the letter (in Teams they always answer with a letter) or the label's words. The option `value` is never sent. Map the answer by its letter first, then by the label text, to the options you showed last. A bare letter such as "A" is a full answer: never ask the user to confirm it or to tap instead.
+**Reading the answer.** The options are lettered in order: the first option is A, the second B, and so on. A click arrives as "{letter}. {label}", and so does a letter typed on its own (in Teams they always answer with a letter): Puli expands it to the option it names. The user may also type the label's words. The option `value` is never sent. Take the option by its label text first, then by its letter, from the options you showed last. A bare letter such as "A" is a full answer: never ask the user to confirm it or to tap instead.
 
 Example — role selection during onboarding:
 

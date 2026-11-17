@@ -13,7 +13,7 @@ Work out the test cycle with the user in the conversation, then create it with t
 
 ## Choice lists
 
-Every `<SELECT>` in this flow is answered by letter: the first option is A, the second B, and so on. The reply arrives as "{letter}. {label}" (a click), a letter on its own (always in Teams), or text the user typed. Map it by its letter, then by the label text, to the options you showed last. A bare letter is a full answer: act on it, never ask the user to confirm it or to tap instead.
+Every `<SELECT>` in this flow is answered by letter: the first option is A, the second B, and so on. The reply arrives as "{letter}. {label}" (a click, or a letter the user typed, which Puli expands to its option), or text the user typed. Take the option by its label text first, then by its letter, from the options you showed last. A bare letter is a full answer: act on it, never ask the user to confirm it or to tap instead.
 
 ## Release already known
 
@@ -43,7 +43,7 @@ Run `db-client app-releases list` (the `db_client` skill). It returns the live r
 <SELECT>{"id":"cycle_release","prompt":"Which version should I test?","options":[{"value":"<id>","label":"example 2.4.1 (mobile_app)"},{"value":"<id>","label":"shop 2.4.0 (website)"},{"value":"other","label":"a different release"}]}</SELECT>
 ```
 
-The reply arrives as "{letter}. {label}" (a click), a letter on its own, or text the user typed; the option value is never sent. Map the reply to a row by its letter, then by the label text, against the rows you showed. When nothing matches, say so in one line and show the list again.
+The reply arrives as "{letter}. {label}" (a click, or a typed letter Puli expanded) or as text the user typed; the option value is never sent. Map the reply to a row by its label text, then by its letter, against the rows you showed. When nothing matches, say so in one line and show the list again.
 
 - **A different release:** ask for the release key, and look it up in the full list from `app-releases list`.
   - One row matches: take it.

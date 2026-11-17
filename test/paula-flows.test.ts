@@ -47,8 +47,9 @@ describe("the test cycle creation flow", () => {
     expect(tools).toMatch(/A bare letter such as "A" is a full answer/);
   });
 
-  it("maps a reply by its letter, then its label, never by the option value", () => {
-    expect(creation).toMatch(/by its letter, then by the label text/);
+  it("maps a reply by its label, then its letter, never by the option value", () => {
+    expect(creation).toMatch(/by its label text, then by its letter/);
+    expect(tools).toMatch(/Puli expands it to the option it names/);
     expect(creation).toMatch(/value is never sent/);
   });
 
@@ -86,6 +87,13 @@ describe("the app version flow", () => {
     expect(version).toContain("db-client app-versions create");
     expect(version).toMatch(/A declaration without a build creates nothing/);
     expect(version).toMatch(/Teams 1:1 and group chats.*link/s);
+  });
+
+  it("shows the upload widget whenever it asks for a file", () => {
+    expect(version).toMatch(
+      /every reply there that asks for the build includes `<APPVERSIONUPLOAD>/,
+    );
+    expect(version).toMatch(/never ask for an upload without it/);
   });
 
   it("says the version is being analyzed and she will follow up when it is ready", () => {
