@@ -68,7 +68,7 @@ Always, before any cycle is created, write one line: "Running this on `<app_slug
 
 ### Step 4: create it
 
-Only after the user confirmed Step 3, run the `test-cycle` skill with `app_release_id`, `app_slug`, `release_key`, the user's words verbatim and the focus. Then follow the skill.
+Only after the user confirmed Step 3, run the `test-cycle` skill with `app_release_id`, `app_slug`, `release_key`, the user's words verbatim and the focus. This always creates a new cycle: run its `state.py` without `--id`. Never pick up another cycle, even an open one you remember from your notes or an earlier conversation. Then follow the skill.
 
 ## Exit conditions
 
