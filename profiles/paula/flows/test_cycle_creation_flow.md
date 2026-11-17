@@ -58,13 +58,13 @@ Ask only when the request and the hand-off name none. Ask once:
 
 For "something specific", wait for the user's words and use them as the focus.
 
-### Step 3: confirm in one line
+### Step 3: confirm in one line, then wait
 
-State the choice in one line: "Running this on `<app_slug>` `<release_key>` (`<kind>`)", with the focus. If the user's reply contradicts it, go back to the step it contradicts.
+Always, before any cycle is created, write one line: "Running this on `<app_slug>` `<release_key>` (`<kind>`)", with the focus, and ask the user to confirm. Then end your reply and wait for their answer: never run the skill in the same reply as this line. If their answer contradicts it, go back to the step it contradicts.
 
 ### Step 4: create it
 
-Run the `test-cycle` skill with `app_release_id`, `app_slug`, `release_key`, the user's words verbatim and the focus. Then follow the skill.
+Only after the user confirmed Step 3, run the `test-cycle` skill with `app_release_id`, `app_slug`, `release_key`, the user's words verbatim and the focus. Then follow the skill.
 
 ## Exit conditions
 

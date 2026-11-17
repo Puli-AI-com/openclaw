@@ -57,6 +57,8 @@ describe("the test cycle creation flow", () => {
 
   it("states the choice in one line and hands the release to the skill", () => {
     expect(creation).toContain("Running this on `<app_slug>` `<release_key>` (`<kind>`)");
+    expect(creation).toMatch(/never run the skill in the same reply as this line/);
+    expect(creation).toMatch(/Only after the user confirmed Step 3/);
     expect(creation).toMatch(/run the `test-cycle` skill with `app_release_id`/i);
     expect(creation).toMatch(/user's words verbatim/);
   });
