@@ -616,6 +616,7 @@ async function sendAnnounce(item: AnnounceQueueItem) {
       to: requesterIsSubagent ? undefined : origin?.to,
       threadId: requesterIsSubagent ? undefined : threadId,
       deliver: !requesterIsSubagent,
+      timeout: item.timeoutSeconds,
       internalEvents: item.internalEvents,
       inputProvenance: {
         kind: "inter_session",
@@ -727,6 +728,7 @@ async function maybeQueueSubagentAnnounce(params: {
         sourceSessionKey: params.sourceSessionKey,
         sourceChannel: params.sourceChannel,
         sourceTool: params.sourceTool,
+        timeoutSeconds: entry?.jobTimeoutSeconds,
       },
       settings: queueSettings,
       send: sendAnnounce,
@@ -809,6 +811,11 @@ async function sendSubagentAnnounceDirectly(params: {
             message: params.triggerMessage,
             deliver: shouldDeliverExternally,
             bestEffortDeliver: params.bestEffortDeliver,
+            // The turn this starts reuses the timeout of the requester's hook or cron job.
+            timeout: params.requesterIsSubagent
+              ? undefined
+              : loadRequesterSessionEntry(params.targetRequesterSessionKey).entry
+                  ?.jobTimeoutSeconds,
             internalEvents: params.internalEvents,
             channel: shouldDeliverExternally ? directChannel : undefined,
             accountId: shouldDeliverExternally ? effectiveDirectOrigin?.accountId : undefined,
