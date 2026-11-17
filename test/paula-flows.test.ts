@@ -41,6 +41,12 @@ describe("the test cycle creation flow", () => {
     expect(creation).toMatch(/never pick one for them/i);
   });
 
+  it("takes a bare letter as a full answer in every list", () => {
+    expect(creation).toMatch(/the first option is A, the second B/);
+    expect(creation).toMatch(/A bare letter is a full answer/);
+    expect(tools).toMatch(/A bare letter such as "A" is a full answer/);
+  });
+
   it("maps a reply by its letter, then its label, never by the option value", () => {
     expect(creation).toMatch(/by its letter, then by the label text/);
     expect(creation).toMatch(/value is never sent/);

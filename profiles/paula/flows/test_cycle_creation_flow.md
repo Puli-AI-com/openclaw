@@ -11,6 +11,10 @@ Work out the test cycle with the user in the conversation, then create it with t
 - The user asks to create, start, set up or initiate a new test cycle, in any channel (the web chat, the Teams personal chat, a Teams 1:1 or group chat). A choice list works everywhere: Teams shows it as a lettered list the user answers with a letter.
 - Or the session has an `[ACTIVE FLOW]` block with `id: test_cycle_creation` (see "Release already known").
 
+## Choice lists
+
+Every `<SELECT>` in this flow is answered by letter: the first option is A, the second B, and so on. The reply arrives as "{letter}. {label}" (a click), a letter on its own (always in Teams), or text the user typed. Map it by its letter, then by the label text, to the options you showed last. A bare letter is a full answer: act on it, never ask the user to confirm it or to tap instead.
+
 ## Release already known
 
 When the session has an `[ACTIVE FLOW]` block with `id: test_cycle_creation`, `step: release_known` and an `app_release_id` in its `payload_json`, the release was handed over (for example after Puli finished preparing a new version). Do not ask for the version again: skip Step 0 and Step 1. Take `app_release_id`, `app_slug`, `release_key` and `kind` from the payload. When its `focus` is not empty, use it and skip Step 2. Go to Step 3.
