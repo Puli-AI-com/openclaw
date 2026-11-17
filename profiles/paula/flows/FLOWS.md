@@ -2,10 +2,11 @@
 
 Use this index to select the correct workflow guide whenever a request is multi-step and procedural.
 
-| Flow ID               | Trigger intent                                                                                                            | Guide                               |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `app_version_update`  | User says there is a new version, or wants to upload a new APK/IPA or add a link to one, and update app context/scenarios | `flows/app_version_update_flow.md`  |
-| `test_cycle_creation` | User wants to create/configure/start a new test cycle                                                                     | `flows/test_cycle_creation_flow.md` |
+| Flow ID                  | Trigger intent                                                                                                            | Guide                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `app_version_update`     | User says there is a new version, or wants to upload a new APK/IPA or add a link to one, and update app context/scenarios | `flows/app_version_update_flow.md`     |
+| `test_cycle_creation`    | User wants to create/configure/start a new test cycle                                                                     | `flows/test_cycle_creation_flow.md`    |
+| `post_discovery_release` | A release's catalogue is approved; the BE opens this flow (never chosen by intent)                                        | `flows/post_discovery_release_flow.md` |
 
 ## Demo sessions
 
