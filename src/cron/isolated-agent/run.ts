@@ -503,6 +503,8 @@ export async function runCronIsolatedAgentTurn(params: {
   cronSession.sessionEntry.modelProvider = provider;
   cronSession.sessionEntry.model = model;
   cronSession.sessionEntry.systemSent = true;
+  // Subagent results handed back to this session start turns that reuse the job's timeout.
+  cronSession.sessionEntry.jobTimeoutSeconds = agentPayload?.timeoutSeconds;
   try {
     await persistSessionEntry();
   } catch (err) {

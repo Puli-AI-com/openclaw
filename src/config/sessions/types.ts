@@ -84,6 +84,11 @@ export type SessionEntry = {
   forkedFromParent?: boolean;
   /** Subagent spawn depth (0 = main, 1 = sub-agent, 2 = sub-sub-agent). */
   spawnDepth?: number;
+  /**
+   * Timeout (seconds) of the latest hook or cron job turn in this session. Turns that hand a
+   * spawned subagent's result back to this session reuse it instead of the agent default.
+   */
+  jobTimeoutSeconds?: number;
   /** Explicit role assigned at spawn time for subagent tool policy/control decisions. */
   subagentRole?: "orchestrator" | "leaf";
   /** Explicit control scope assigned at spawn time for subagent control decisions. */
