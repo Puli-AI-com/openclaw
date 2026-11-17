@@ -23,6 +23,7 @@ let configOverride: ReturnType<(typeof import("../config/config.js"))["loadConfi
 };
 let requesterDepthResolver: (sessionKey?: string) => number = () => 0;
 let subagentSessionRunActive = true;
+let requesterRunActive = false;
 let shouldIgnorePostCompletion = false;
 let pendingDescendantRuns = 0;
 let fallbackRequesterResolution: {
@@ -57,7 +58,7 @@ vi.mock("./subagent-depth.js", () => ({
 }));
 
 vi.mock("./pi-embedded.js", () => ({
-  isEmbeddedPiRunActive: () => false,
+  isEmbeddedPiRunActive: () => requesterRunActive,
   queueEmbeddedPiMessage: () => false,
   waitForEmbeddedPiRunEnd: async () => true,
 }));
@@ -135,9 +136,53 @@ describe("subagent announce timeout config", () => {
     };
     requesterDepthResolver = () => 0;
     subagentSessionRunActive = true;
+    requesterRunActive = false;
     shouldIgnorePostCompletion = false;
     pendingDescendantRuns = 0;
     fallbackRequesterResolution = null;
+  });
+
+  it("starts the requester's turn with its job timeout on the direct call", async () => {
+    sessionStore["agent:main:main"] = {
+      sessionId: "requester-session",
+      updatedAt: Date.now(),
+      jobTimeoutSeconds: 5400,
+    };
+    await runAnnounceFlowForTest("run-job-timeout-direct", { expectsCompletionMessage: true });
+
+    const directAgentCall = findGatewayCall(
+      (call) => call.method === "agent" && call.expectFinal === true,
+    );
+    expect(directAgentCall?.params?.timeout).toBe(5400);
+    expect(directAgentCall?.timeoutMs).toBe(90_000);
+  });
+
+  it("sends no turn timeout when the requester was not started by a hook or cron job", async () => {
+    sessionStore["agent:main:main"] = { sessionId: "chat-session", updatedAt: Date.now() };
+    await runAnnounceFlowForTest("run-job-timeout-none", { expectsCompletionMessage: true });
+
+    const directAgentCall = findGatewayCall(
+      (call) => call.method === "agent" && call.expectFinal === true,
+    );
+    expect(directAgentCall).toBeDefined();
+    expect(directAgentCall?.params?.timeout).toBeUndefined();
+  });
+
+  it("starts the requester's turn with its job timeout on the queued call", async () => {
+    requesterRunActive = true;
+    sessionStore["agent:main:main"] = {
+      sessionId: "requester-session",
+      updatedAt: Date.now(),
+      jobTimeoutSeconds: 1800,
+    };
+    await runAnnounceFlowForTest("run-job-timeout-queued");
+
+    await vi.waitFor(() => {
+      expect(findGatewayCall((call) => call.method === "agent")).toBeDefined();
+    });
+    const queuedAgentCall = findGatewayCall((call) => call.method === "agent");
+    expect(queuedAgentCall?.expectFinal).toBeUndefined();
+    expect(queuedAgentCall?.params?.timeout).toBe(1800);
   });
 
   it("uses 90s timeout by default for direct announce agent call", async () => {

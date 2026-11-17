@@ -33,6 +33,8 @@ export type AnnounceQueueItem = {
   sourceSessionKey?: string;
   sourceChannel?: string;
   sourceTool?: string;
+  /** Turn timeout (seconds) for the requester turn this item starts; unset uses the agent default. */
+  timeoutSeconds?: number;
 };
 
 export type AnnounceQueueSettings = {
