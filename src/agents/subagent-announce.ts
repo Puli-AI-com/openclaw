@@ -752,7 +752,6 @@ async function sendSubagentAnnounceDirectly(params: {
   sourceChannel?: string;
   sourceTool?: string;
   requesterIsSubagent: boolean;
-  jobTimeoutSeconds?: number;
   signal?: AbortSignal;
 }): Promise<SubagentAnnounceDeliveryResult> {
   if (params.signal?.aborted) {
@@ -812,7 +811,11 @@ async function sendSubagentAnnounceDirectly(params: {
             message: params.triggerMessage,
             deliver: shouldDeliverExternally,
             bestEffortDeliver: params.bestEffortDeliver,
-            timeout: params.jobTimeoutSeconds,
+            // The turn this starts reuses the timeout of the requester's hook or cron job.
+            timeout: params.requesterIsSubagent
+              ? undefined
+              : loadRequesterSessionEntry(params.targetRequesterSessionKey).entry
+                  ?.jobTimeoutSeconds,
             internalEvents: params.internalEvents,
             channel: shouldDeliverExternally ? directChannel : undefined,
             accountId: shouldDeliverExternally ? effectiveDirectOrigin?.accountId : undefined,
@@ -862,7 +865,6 @@ async function deliverSubagentAnnouncement(params: {
   expectsCompletionMessage: boolean;
   bestEffortDeliver?: boolean;
   directIdempotencyKey: string;
-  jobTimeoutSeconds?: number;
   signal?: AbortSignal;
 }): Promise<SubagentAnnounceDeliveryResult> {
   return await runSubagentAnnounceDispatch({
@@ -897,7 +899,6 @@ async function deliverSubagentAnnouncement(params: {
         expectsCompletionMessage: params.expectsCompletionMessage,
         signal: params.signal,
         bestEffortDeliver: params.bestEffortDeliver,
-        jobTimeoutSeconds: params.jobTimeoutSeconds,
       }),
   });
 }
@@ -1421,12 +1422,9 @@ export async function runSubagentAnnounceFlow(params: {
     // Send to the requester session. For nested subagents this is an internal
     // follow-up injection (deliver=false) so the orchestrator receives it.
     let directOrigin = targetRequesterOrigin;
-    // The turn this starts reuses the timeout of the requester's hook or cron job.
-    let jobTimeoutSeconds: number | undefined;
     if (!requesterIsSubagent) {
       const { entry } = loadRequesterSessionEntry(targetRequesterSessionKey);
       directOrigin = resolveAnnounceOrigin(entry, targetRequesterOrigin);
-      jobTimeoutSeconds = entry?.jobTimeoutSeconds;
     }
     const completionDirectOrigin =
       expectsCompletionMessage && !requesterIsSubagent
@@ -1461,7 +1459,6 @@ export async function runSubagentAnnounceFlow(params: {
       expectsCompletionMessage: expectsCompletionMessage,
       bestEffortDeliver: params.bestEffortDeliver,
       directIdempotencyKey,
-      jobTimeoutSeconds,
       signal: params.signal,
     });
     didAnnounce = delivery.delivered;
