@@ -16,6 +16,8 @@ import {
 
 /** page_tools.MAX_VIEWPORTS in the skills; observe never asks for more. */
 export const MAX_VIEWPORTS = 10;
+/** page_tools.ONE_SCREEN_DP: the page-length budget of a one-screen read, no scrolling. */
+export const ONE_SCREEN_DP = 0;
 /** The state file beside run.yaml that holds the lead's leases (run_files.STATE_NAME). */
 export const STATE_NAME = "discovery-state.json";
 /** device_helpers._ID: an instruction id names a file, so letters, digits, . _ - only. */
@@ -95,7 +97,9 @@ export async function leasedRun(
   }
   if (leases[instructionId] !== deviceId) {
     throw new DiscoveryToolError(
-      `device '${deviceId}' is not leased to instruction '${instructionId}'`,
+      `device '${deviceId}' is not leased to instruction '${instructionId}': the lead runs ` +
+        `\`LS instruction --instruction ${instructionId} --device ${deviceId} ...\` before ` +
+        "spawning its executor, again for each retry",
     );
   }
   return runPath;
@@ -329,9 +333,11 @@ export function createDiscoveryTools(
     }),
     execute: async (_id, args, signal) => {
       const params = args as Record<string, unknown>;
-      const requested = typeof params.viewports === "number" ? Math.trunc(params.viewports) : 1;
-      const viewports = Math.max(1, Math.min(requested, MAX_VIEWPORTS));
-      return await callHelper("observe", params, [["max-viewports", String(viewports)]], signal);
+      const viewports = typeof params.viewports === "number" ? Math.trunc(params.viewports) : 1;
+      // As discovery_mcp.py: one viewport reads one screen; more scroll as far as the
+      // helpers' default page-length budget goes.
+      const budget = viewports <= 1 ? String(ONE_SCREEN_DP) : undefined;
+      return await callHelper("observe", params, [["max-content-dp", budget]], signal);
     },
   };
 
