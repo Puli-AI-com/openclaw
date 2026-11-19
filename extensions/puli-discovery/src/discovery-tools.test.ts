@@ -239,7 +239,10 @@ describe("discovery tools", () => {
           action: "back",
           markdown: "x",
         }),
-      ).rejects.toThrow("device 'dev-2' is not leased to instruction 'i-1'");
+      ).rejects.toThrow(
+        "device 'dev-2' is not leased to instruction 'i-1': the lead runs " +
+          "`LS instruction --instruction i-1 --device dev-2 ...` before spawning its executor",
+      );
     }
     expect(calls).toEqual([]);
   });

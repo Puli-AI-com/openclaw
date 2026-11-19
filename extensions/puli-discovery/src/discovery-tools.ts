@@ -97,7 +97,9 @@ export async function leasedRun(
   }
   if (leases[instructionId] !== deviceId) {
     throw new DiscoveryToolError(
-      `device '${deviceId}' is not leased to instruction '${instructionId}'`,
+      `device '${deviceId}' is not leased to instruction '${instructionId}': the lead runs ` +
+        `\`LS instruction --instruction ${instructionId} --device ${deviceId} ...\` before ` +
+        "spawning its executor, again for each retry",
     );
   }
   return runPath;
