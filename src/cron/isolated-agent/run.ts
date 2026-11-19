@@ -689,7 +689,7 @@ export async function runCronIsolatedAgentTurn(params: {
       }
     }
   } catch (err) {
-    return withRunSession({ status: "error", error: String(err) });
+    return withRunSession({ status: "error", error: isAborted() ? abortReason() : String(err) });
   }
 
   if (isAborted()) {

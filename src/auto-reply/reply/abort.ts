@@ -217,18 +217,19 @@ function normalizeRequesterSessionKey(
 export function stopSubagentsForRequester(params: {
   cfg: OpenClawConfig;
   requesterSessionKey?: string;
-}): { stopped: number } {
+}): { stopped: number; childKeys: string[] } {
   const requesterKey = normalizeRequesterSessionKey(params.cfg, params.requesterSessionKey);
   if (!requesterKey) {
-    return { stopped: 0 };
+    return { stopped: 0, childKeys: [] };
   }
   const runs = listSubagentRunsForController(requesterKey);
   if (runs.length === 0) {
-    return { stopped: 0 };
+    return { stopped: 0, childKeys: [] };
   }
 
   const storeCache = new Map<string, Record<string, SessionEntry>>();
   const seenChildKeys = new Set<string>();
+  const childKeys: string[] = [];
   let stopped = 0;
 
   for (const run of runs) {
@@ -237,6 +238,7 @@ export function stopSubagentsForRequester(params: {
       continue;
     }
     seenChildKeys.add(childKey);
+    childKeys.push(childKey);
 
     if (!run.endedAt) {
       const cleared = clearSessionQueues([childKey]);
@@ -268,12 +270,13 @@ export function stopSubagentsForRequester(params: {
       requesterSessionKey: childKey,
     });
     stopped += cascadeResult.stopped;
+    childKeys.push(...cascadeResult.childKeys);
   }
 
   if (stopped > 0) {
     logVerbose(`abort: stopped ${stopped} subagent run(s) for ${requesterKey}`);
   }
-  return { stopped };
+  return { stopped, childKeys };
 }
 
 export async function tryFastAbortFromMessage(params: {
