@@ -3,12 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AnyAgentTool, OpenClawPluginToolContext } from "openclaw/plugin-sdk/puli-discovery";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  createDiscoveryTools,
-  type HelperRun,
-  type HelperRunner,
-  MAX_VIEWPORTS,
-} from "./discovery-tools.js";
+import { createDiscoveryTools, type HelperRun, type HelperRunner } from "./discovery-tools.js";
 
 // A 1x1 PNG, the screenshot the fake helper reports.
 const PNG = Buffer.from(
@@ -103,7 +98,7 @@ describe("discovery tools", () => {
       `--run=${runPath}`,
       "--device=dev-1",
       "--instruction=i-1",
-      "--max-viewports=1",
+      "--max-content-dp=0",
     ]);
     expect(call.env.DISCOVERY_RUN).toBe(runPath);
     expect(call.cwd).toBe(runDir);
@@ -122,15 +117,16 @@ describe("discovery tools", () => {
     expect(calls[0].argv.slice(0, 4)).toEqual(["uv", "run", "--project", "/projects/discovery"]);
   });
 
-  it("clamps observe's viewports to 1 through MAX_VIEWPORTS", async () => {
+  it("reads one screen for one viewport and leaves more to the helpers' default budget", async () => {
     const { observe } = tools(ok({}));
-    for (const viewports of [0, 3, 99]) {
+    for (const viewports of [0, 1, 3, 99]) {
       await observe.execute("c", { instruction_id: "i-1", device_id: "dev-1", viewports });
     }
     expect(calls.map((call) => helperArgs(call).at(-1))).toEqual([
-      "--max-viewports=1",
-      "--max-viewports=3",
-      `--max-viewports=${MAX_VIEWPORTS}`,
+      "--max-content-dp=0",
+      "--max-content-dp=0",
+      "--instruction=i-1",
+      "--instruction=i-1",
     ]);
   });
 
