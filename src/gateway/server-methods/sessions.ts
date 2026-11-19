@@ -19,11 +19,14 @@ import {
   validateSessionsPreviewParams,
   validateSessionsResetParams,
   validateSessionsResolveParams,
+  validateSessionsStopParams,
 } from "../protocol/index.js";
+import { markStopped } from "../server/hook-stops.js";
 import {
   archiveSessionTranscriptsForSession,
   cleanupSessionBeforeMutation,
   emitSessionUnboundLifecycleEvent,
+  ensureSessionRuntimeCleanup,
   performGatewaySessionReset,
 } from "../session-reset-service.js";
 import {
@@ -273,6 +276,33 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       return;
     }
     respond(true, { ok: true, key: result.key, entry: result.entry }, undefined);
+  },
+  // Stops everything running for a session (its hook, subagents and processes) and keeps its
+  // entry and transcript. Unlike sessions.reset it starts no new session and fires no hook.
+  "sessions.stop": async ({ params, respond }) => {
+    if (!assertValidParams(params, validateSessionsStopParams, "sessions.stop", respond)) {
+      return;
+    }
+    const key = requireSessionKey(params.key, respond);
+    if (!key) {
+      return;
+    }
+    const { cfg, target } = resolveGatewaySessionTargetFromKey(key);
+    // The mark goes first so a hook that is not running yet still ends without a prompt.
+    markStopped(target.canonicalKey);
+    const { entry } = loadSessionEntry(key);
+    const cleanupError = await ensureSessionRuntimeCleanup({
+      cfg,
+      key,
+      target,
+      sessionId: entry?.sessionId,
+      killProcesses: true,
+    });
+    if (cleanupError) {
+      respond(false, undefined, cleanupError);
+      return;
+    }
+    respond(true, { ok: true, key: target.canonicalKey }, undefined);
   },
   "sessions.delete": async ({ params, respond, client, isWebchatConnect }) => {
     if (!assertValidParams(params, validateSessionsDeleteParams, "sessions.delete", respond)) {

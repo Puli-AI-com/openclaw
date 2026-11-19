@@ -331,6 +331,10 @@ export async function runEmbeddedPiAgent(
   return enqueueSession(() =>
     enqueueGlobal(async () => {
       const started = Date.now();
+      // A run stopped while it waited in the queues sends no prompt.
+      if (params.abortSignal?.aborted) {
+        return { meta: { durationMs: Date.now() - started, aborted: true } };
+      }
       const workspaceResolution = resolveRunWorkspaceDir({
         workspaceDir: params.workspaceDir,
         sessionKey: params.sessionKey,
@@ -967,6 +971,10 @@ export async function runEmbeddedPiAgent(
           const prompt =
             provider === "anthropic" ? scrubAnthropicRefusalMagic(params.prompt) : params.prompt;
 
+          // A run stopped during setup or a retry backoff sends no further prompt.
+          if (params.abortSignal?.aborted) {
+            return { meta: { durationMs: Date.now() - started, aborted: true } };
+          }
           attemptStartedAt = Date.now();
           const attempt = await runEmbeddedAttempt({
             sessionId: params.sessionId,

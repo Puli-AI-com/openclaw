@@ -1,18 +1,22 @@
 import { randomUUID } from "node:crypto";
+import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import type { CliDeps } from "../../cli/deps.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveMainSessionKeyFromConfig } from "../../config/sessions.js";
 import { runCronIsolatedAgentTurn } from "../../cron/isolated-agent.js";
+import { resolveCronAgentSessionKey } from "../../cron/isolated-agent/session-key.js";
 import type { CronJob } from "../../cron/types.js";
 import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
+import { normalizeAgentId } from "../../routing/session-key.js";
 import {
   normalizeHookDispatchSessionKey,
   type HookAgentDispatchPayload,
   type HooksConfigResolved,
 } from "../hooks.js";
 import { createHooksRequestHandler } from "../server-http.js";
+import { HOOK_STOP_REASON, isStopped, register, unregister } from "./hook-stops.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -66,9 +70,21 @@ export function createGatewayHooksRequestHandler(params: {
     };
 
     const runId = randomUUID();
+    // One controller per dispatch, registered under the store key the cron run writes, so
+    // `sessions.stop` aborts this hook wherever it is, and a dispatch after the stop starts aborted.
+    const controller = new AbortController();
+    let stopKey: string | undefined;
     void (async () => {
       try {
         const cfg = loadConfig();
+        stopKey = resolveCronAgentSessionKey({
+          sessionKey,
+          agentId: normalizeAgentId(value.agentId?.trim() || resolveDefaultAgentId(cfg)),
+        });
+        register(stopKey, controller);
+        if (isStopped(stopKey)) {
+          controller.abort(HOOK_STOP_REASON);
+        }
         const result = await runCronIsolatedAgentTurn({
           cfg,
           deps,
@@ -77,6 +93,7 @@ export function createGatewayHooksRequestHandler(params: {
           sessionKey,
           lane: "cron",
           deliveryContract: "shared",
+          abortSignal: controller.signal,
         });
         const summary = result.summary?.trim() || result.error?.trim() || result.status;
         const prefix =
@@ -96,6 +113,10 @@ export function createGatewayHooksRequestHandler(params: {
         });
         if (value.wakeMode === "now") {
           requestHeartbeatNow({ reason: `hook:${jobId}:error` });
+        }
+      } finally {
+        if (stopKey) {
+          unregister(stopKey, controller);
         }
       }
     })();

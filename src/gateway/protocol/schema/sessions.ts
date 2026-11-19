@@ -97,6 +97,13 @@ export const SessionsResetParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const SessionsStopParamsSchema = Type.Object(
+  {
+    key: NonEmptyString,
+  },
+  { additionalProperties: false },
+);
+
 export const SessionsDeleteParamsSchema = Type.Object(
   {
     key: NonEmptyString,

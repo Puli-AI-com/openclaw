@@ -57,6 +57,7 @@ const BASE_METHODS = [
   "sessions.preview",
   "sessions.patch",
   "sessions.reset",
+  "sessions.stop",
   "sessions.delete",
   "sessions.compact",
   "last-heartbeat",

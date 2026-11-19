@@ -16,6 +16,7 @@ import { unbindThreadBindingsBySessionKey } from "../discord/monitor/thread-bind
 import { logVerbose } from "../globals.js";
 import { createInternalHookEvent, triggerInternalHook } from "../hooks/internal-hooks.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
+import { getProcessSupervisor } from "../process/supervisor/index.js";
 import {
   isSubagentSessionKey,
   normalizeAgentId,
@@ -124,11 +125,13 @@ export async function emitSessionUnboundLifecycleEvent(params: {
   );
 }
 
-async function ensureSessionRuntimeCleanup(params: {
+export async function ensureSessionRuntimeCleanup(params: {
   cfg: ReturnType<typeof loadConfig>;
   key: string;
   target: ReturnType<typeof resolveGatewaySessionStoreTarget>;
   sessionId?: string;
+  // The stop path also kills every process of the session and of each subagent it visited.
+  killProcesses?: boolean;
 }) {
   const closeTrackedBrowserTabs = async () => {
     const closeKeys = new Set<string>([
@@ -149,7 +152,16 @@ async function ensureSessionRuntimeCleanup(params: {
     queueKeys.add(params.sessionId);
   }
   clearSessionQueues([...queueKeys]);
-  stopSubagentsForRequester({ cfg: params.cfg, requesterSessionKey: params.target.canonicalKey });
+  const { childKeys } = stopSubagentsForRequester({
+    cfg: params.cfg,
+    requesterSessionKey: params.target.canonicalKey,
+  });
+  if (params.killProcesses) {
+    const supervisor = getProcessSupervisor();
+    for (const scopeKey of new Set([...queueKeys, ...childKeys])) {
+      supervisor.cancelScope(scopeKey, "manual-cancel");
+    }
+  }
   if (!params.sessionId) {
     clearBootstrapSnapshot(params.target.canonicalKey);
     await closeTrackedBrowserTabs();

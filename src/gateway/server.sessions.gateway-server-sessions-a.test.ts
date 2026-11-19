@@ -20,7 +20,7 @@ import {
 
 const sessionCleanupMocks = vi.hoisted(() => ({
   clearSessionQueues: vi.fn(() => ({ followupCleared: 0, laneCleared: 0, keys: [] })),
-  stopSubagentsForRequester: vi.fn(() => ({ stopped: 0 })),
+  stopSubagentsForRequester: vi.fn(() => ({ stopped: 0, childKeys: [] as string[] })),
 }));
 
 const bootstrapCacheMocks = vi.hoisted(() => ({
