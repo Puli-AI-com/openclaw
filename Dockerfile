@@ -277,6 +277,7 @@ COPY --chown=node:node scripts/migrate-config-state-separation.mjs /app/scripts/
 COPY --chown=node:node scripts/reconcile-openclaw-config.mjs /app/scripts/reconcile-openclaw-config.mjs
 COPY --chown=node:node scripts/link-profile-files.sh /app/scripts/link-profile-files.sh
 COPY --chown=node:node scripts/account-sweep.sh /app/scripts/account-sweep.sh
+COPY --chown=node:node scripts/jobs-manager-service.sh /app/scripts/jobs-manager-service.sh
 RUN mkdir -p /home/node/.openclaw /var/lib/puli/openclaw-state /tmp/puli-openclaw && \
     chown -R node:node /home/node/.openclaw /var/lib/puli /tmp/puli-openclaw
 

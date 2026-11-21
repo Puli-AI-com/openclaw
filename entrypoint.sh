@@ -94,6 +94,15 @@ else
     echo "entrypoint: warning — account-sweep script not found"
 fi
 
+# The jobs-manager service runs every test cycle from the cycle run table, so a restart or redeploy
+# loses no run and no problem found so far (PUL-458). Kept up by its own restart loop.
+if [ -f /app/scripts/jobs-manager-service.sh ]; then
+    sh /app/scripts/jobs-manager-service.sh &
+    echo "entrypoint: jobs-manager service loop started (PID $!)"
+else
+    echo "entrypoint: warning: jobs-manager service script not found"
+fi
+
 UI_COMPONENT_KB="/opt/puli/knowledge/ui-components/REVISION"
 if [ -f "$UI_COMPONENT_KB" ]; then
     echo "entrypoint: ui-component KB revision $(cat "$UI_COMPONENT_KB")"
