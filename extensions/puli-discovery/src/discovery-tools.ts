@@ -14,8 +14,6 @@ import {
 //   uv run --project $DISCOVERY_PROJECT python \
 //     $RAMPUP_HOME/application-discovery/scripts/device_helpers.py <cmd> --run <run.yaml> ...
 
-/** page_tools.MAX_VIEWPORTS in the skills; observe never asks for more. */
-export const MAX_VIEWPORTS = 10;
 /** page_tools.ONE_SCREEN_DP: the page-length budget of a one-screen read, no scrolling. */
 export const ONE_SCREEN_DP = 0;
 /** The state file beside run.yaml that holds the lead's leases (run_files.STATE_NAME). */
@@ -322,13 +320,17 @@ export function createDiscoveryTools(
       "Read the page on screen: its controls (key, label, role, kind, refused reason, and " +
       "`allowed`, the allow line and its why when one let the control through, and `overridden`: " +
       "true on a refused control the lead lifted the refusal of, which `act` then presses), a " +
-      "proposed page identity, and a screenshot per viewport. `viewports` > 1 scrolls down " +
-      "through the page first.",
+      "proposed page identity, and a screenshot per viewport. `viewports` 1 reads the first " +
+      "screen only; 2 or more scroll down the page as far as the page-length budget goes.",
     parameters: Type.Object({
       instruction_id: INSTRUCTION_ID_PARAM,
       device_id: DEVICE_ID_PARAM,
       viewports: Type.Optional(
-        Type.Integer({ description: `Viewports to read, 1 to ${MAX_VIEWPORTS}; default 1.` }),
+        Type.Integer({
+          description:
+            "1 reads the first screen only; 2 or more scroll down the page as far as the " +
+            "page-length budget goes. Default 1.",
+        }),
       ),
     }),
     execute: async (_id, args, signal) => {
