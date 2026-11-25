@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
+import { HOOK_STOP_REASON, isStopped, register, unregister } from "../../agents/session-stops.js";
 import type { CliDeps } from "../../cli/deps.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveMainSessionKeyFromConfig } from "../../config/sessions.js";
@@ -16,7 +17,6 @@ import {
   type HooksConfigResolved,
 } from "../hooks.js";
 import { createHooksRequestHandler } from "../server-http.js";
-import { HOOK_STOP_REASON, isStopped, register, unregister } from "./hook-stops.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -81,7 +81,7 @@ export function createGatewayHooksRequestHandler(params: {
           sessionKey,
           agentId: normalizeAgentId(value.agentId?.trim() || resolveDefaultAgentId(cfg)),
         });
-        register(stopKey, controller);
+        register(stopKey, controller, value.name);
         if (isStopped(stopKey)) {
           controller.abort(HOOK_STOP_REASON);
         }

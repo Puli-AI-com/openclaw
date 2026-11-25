@@ -58,6 +58,7 @@ import {
   type FailoverReason,
 } from "../pi-embedded-helpers.js";
 import { ensureRuntimePluginsLoaded } from "../runtime-plugins.js";
+import { isSessionStopped } from "../session-stops.js";
 import { acquireSessionWriteLock } from "../session-write-lock.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../usage.js";
 import { redactRunIdentifier, resolveRunWorkspaceDir } from "../workspace-run.js";
@@ -328,11 +329,17 @@ export async function runEmbeddedPiAgent(
       : "markdown");
   const isProbeSession = params.sessionId?.startsWith("probe-") ?? false;
 
+  // `sessions.stop` marks a session; its runs, and those of every session spawned under it,
+  // end here, whichever path started them (a hook dispatch, a completion announce, a spawn).
+  const runStopped = () =>
+    params.abortSignal?.aborted ||
+    (params.sessionKey ? isSessionStopped(params.sessionKey, { cfg: params.config }) : false);
+
   return enqueueSession(() =>
     enqueueGlobal(async () => {
       const started = Date.now();
       // A run stopped while it waited in the queues sends no prompt.
-      if (params.abortSignal?.aborted) {
+      if (runStopped()) {
         return { meta: { durationMs: Date.now() - started, aborted: true } };
       }
       const workspaceResolution = resolveRunWorkspaceDir({
@@ -972,7 +979,7 @@ export async function runEmbeddedPiAgent(
             provider === "anthropic" ? scrubAnthropicRefusalMagic(params.prompt) : params.prompt;
 
           // A run stopped during setup or a retry backoff sends no further prompt.
-          if (params.abortSignal?.aborted) {
+          if (runStopped()) {
             return { meta: { durationMs: Date.now() - started, aborted: true } };
           }
           attemptStartedAt = Date.now();

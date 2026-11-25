@@ -12,7 +12,7 @@ import type { OpenClawConfig } from "../config/config.js";
 // running `uv run python`. Only the model is scripted (pi-ai's streamSimple), which also
 // counts the model requests a stopped hook must not send.
 
-type ModelCall = { marker: string; toolResults: number; prompt: string };
+type ModelCall = { marker: string; toolResults: number; prompt: string; aborted: boolean };
 type ModelAction =
   | { kind: "hold" }
   | { kind: "text"; text: string }
@@ -20,17 +20,35 @@ type ModelAction =
   | { kind: "error"; message: string };
 
 const model = vi.hoisted(() => ({
-  calls: [] as Array<{ marker: string; toolResults: number; prompt: string }>,
+  calls: [] as ModelCall[],
   script: null as null | ((call: ModelCall) => ModelAction | Promise<ModelAction>),
 }));
 
 // Holds a hook's pre-run setup (the cron run awaits the workspace before it queues the turn).
 const setupGate = vi.hoisted(() => ({ pending: null as null | Promise<void> }));
 
+// Routes the gateway calls the subagent spawn and announce paths make (`agent`, `agent.wait`,
+// `sessions.patch`, ...) to the real handlers in this process. Null: the real callGateway.
+type GatewayCall = { method: string; params?: Record<string, unknown>; expectFinal?: boolean };
+const gateway = vi.hoisted(() => ({
+  route: null as null | ((opts: GatewayCall) => Promise<unknown>),
+  calls: [] as GatewayCall[],
+  // Holds the `agent` call that starts a subagent: a spawn in flight when the stop arrives.
+  holdChildAgent: null as null | Promise<void>,
+}));
+
 const pluginTools = vi.hoisted(() => ({
   resolve: null as null | ((ctx: { sessionKey?: string; agentId?: string }) => unknown[]),
 }));
 
+vi.mock("./call.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./call.js")>();
+  return {
+    ...actual,
+    callGateway: (opts: GatewayCall) =>
+      gateway.route ? gateway.route(opts) : actual.callGateway(opts as never),
+  };
+});
 vi.mock("../agents/tools/image-tool.js", () => ({ createImageTool: () => null }));
 vi.mock("../agents/tools/web-tools.js", () => ({
   createWebSearchTool: () => null,
@@ -95,6 +113,8 @@ vi.mock("@mariozechner/pi-ai", async () => {
         marker: /MARK-[A-Za-z0-9-]+/.exec(userText)?.[0] ?? "",
         toolResults: context.messages.filter((message) => message.role === "toolResult").length,
         prompt: userText,
+        // A real provider request with an aborted signal fails at once: it is no model turn.
+        aborted: options?.signal?.aborted === true,
       };
       model.calls.push(call);
       const build = (content: unknown[], stopReason: string, errorMessage?: string) => ({
@@ -114,6 +134,10 @@ vi.mock("@mariozechner/pi-ai", async () => {
         stream.end();
       };
       void (async () => {
+        if (call.aborted) {
+          finishAborted();
+          return;
+        }
         const action = (await model.script?.(call)) ?? { kind: "text", text: "ok" };
         if (action.kind === "hold") {
           if (options?.signal?.aborted) {
@@ -188,6 +212,7 @@ type Modules = {
   setCommandLaneConcurrency: typeof import("../process/command-queue.js").setCommandLaneConcurrency;
   resolveAgentDir: typeof import("../agents/agent-scope.js").resolveAgentDir;
   createDiscoveryTools: typeof import("../../extensions/puli-discovery/src/discovery-tools.js").createDiscoveryTools;
+  coreGatewayHandlers: typeof import("./server-methods.js").coreGatewayHandlers;
 };
 let mod: Modules;
 
@@ -293,6 +318,7 @@ beforeAll(async () => {
     tools,
     queue,
     scope,
+    methods,
   ] = await Promise.all([
     import("./server/hooks.js"),
     import("./hooks.js"),
@@ -305,6 +331,7 @@ beforeAll(async () => {
     import("../../extensions/puli-discovery/src/discovery-tools.js"),
     import("../process/command-queue.js"),
     import("../agents/agent-scope.js"),
+    import("./server-methods.js"),
   ]);
   mod = {
     createGatewayHooksRequestHandler: hooks.createGatewayHooksRequestHandler,
@@ -323,6 +350,7 @@ beforeAll(async () => {
     setCommandLaneConcurrency: queue.setCommandLaneConcurrency,
     resolveAgentDir: scope.resolveAgentDir,
     createDiscoveryTools: tools.createDiscoveryTools,
+    coreGatewayHandlers: methods.coreGatewayHandlers,
   };
 
   const handler = mod.createGatewayHooksRequestHandler({
@@ -380,7 +408,7 @@ function pidsWith(marker: string): number[] {
 async function waitFor<T>(
   what: string,
   probe: () => T | undefined | false | Promise<T | undefined | false>,
-  timeoutMs = 20_000,
+  timeoutMs = 60_000,
 ): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -450,6 +478,9 @@ async function waitForMainEvents(count: number): Promise<string[]> {
 
 const STOPPED = "stopped by sessions.stop";
 const callsFor = (marker: string) => model.calls.filter((call) => call.marker === marker).length;
+/** The model requests for a marker that a provider would have served: not made with a stopped signal. */
+const liveCallsFor = (marker: string) =>
+  model.calls.filter((call) => call.marker === marker && !call.aborted).length;
 
 function sessionStore(agentId: string) {
   const storePath = mod.resolveStorePath(mod.loadConfig().session?.store, { agentId });
@@ -510,7 +541,12 @@ async function startSubagent(params: {
   const sessionFile = path.join(path.dirname(storePath), `${sessionId}.jsonl`);
   await fs.mkdir(path.dirname(storePath), { recursive: true });
   await mod.updateSessionStore(storePath, (store) => {
-    store[childKey] = { sessionId, updatedAt: Date.now(), sessionFile };
+    store[childKey] = {
+      sessionId,
+      updatedAt: Date.now(),
+      sessionFile,
+      spawnedBy: params.controllerKey,
+    };
   });
   const record = {
     runId: `run-${params.id}`,
@@ -828,4 +864,249 @@ describe("sessions.stop", () => {
       );
     });
   });
+});
+
+// Paula's hook session runs a loop: spawn a lead, `sessions_yield`, and the lead's completion
+// announce wakes the hook session for its next turn. Those turns come through the gateway's
+// `agent` method, not the hook dispatch, so a stop has to hold for them too. The spawn and the
+// announce run for real; only the gateway transport is replaced by in-process handler calls.
+describe("sessions.stop: a hook that loops leads", () => {
+  const gatewayContext = {
+    deps: {},
+    dedupe: new Map(),
+    chatAbortControllers: new Map(),
+    addChatRun: () => {},
+    registerToolEventRecipient: () => {},
+    loadGatewayModelCatalog: async () => [{ id: "m", name: "Mock", provider: "mock" }],
+    logGateway: { warn: () => {}, info: () => {}, error: () => {}, debug: () => {} },
+  };
+
+  async function inProcessGateway(opts: GatewayCall): Promise<unknown> {
+    gateway.calls.push(opts);
+    const sessionKey = opts.params?.sessionKey;
+    if (
+      opts.method === "agent" &&
+      typeof sessionKey === "string" &&
+      sessionKey.includes(":subagent:")
+    ) {
+      await gateway.holdChildAgent;
+    }
+    const handler = mod.coreGatewayHandlers[opts.method];
+    if (!handler) {
+      throw new Error(`no in-process handler for ${opts.method}`);
+    }
+    return await new Promise((resolve, reject) => {
+      void Promise.resolve(
+        handler({
+          req: { type: "req", id: "t", method: opts.method, params: opts.params },
+          params: opts.params ?? {},
+          client: null,
+          isWebchatConnect: () => false,
+          context: gatewayContext,
+          respond: (ok: boolean, payload?: unknown, error?: { message?: string }) => {
+            if (!ok) {
+              reject(new Error(error?.message ?? `${opts.method} failed`));
+            } else if (
+              !(opts.expectFinal && (payload as { status?: string })?.status === "accepted")
+            ) {
+              resolve(payload);
+            }
+          },
+        } as never),
+      ).catch(reject);
+    });
+  }
+
+  const hookIds: string[] = [];
+  const startHook = async (id: string, message: string) => {
+    hookIds.push(id);
+    await postRampupHook(id, message);
+  };
+
+  beforeEach(() => {
+    gateway.route = inProcessGateway;
+    gateway.calls.length = 0;
+    gateway.holdChildAgent = null;
+  });
+
+  afterEach(async () => {
+    // Whatever a test left running ends: new hook and lead turns answer with text, no spawn.
+    model.script = () => ({ kind: "text", text: "ok" });
+    gateway.holdChildAgent = null;
+    for (const id of hookIds.splice(0)) {
+      await rpc("sessions.stop", { key: storeKey(id) });
+    }
+    await settle(300);
+    gateway.route = null;
+    for (const pid of [...pidsWith("sleep 702"), ...pidsWith("--instruction=i-loop")]) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+  });
+
+  const hookTurns = () => liveCallsFor("MARK-loop");
+  /** The hook alternates: spawn lead N, then yield. Anything else is a lead or an executor. */
+  const loopScript =
+    (other: (call: ModelCall) => ModelAction | Promise<ModelAction>) =>
+    (call: ModelCall): ModelAction | Promise<ModelAction> => {
+      if (call.marker !== "MARK-loop") {
+        return other(call);
+      }
+      const turn = hookTurns();
+      // A loop that the stop does not end would spin the whole process; cap it.
+      if (turn > 8) {
+        return { kind: "text", text: "enough" };
+      }
+      return turn % 2 === 1
+        ? {
+            kind: "tool",
+            name: "sessions_spawn",
+            args: { task: `MARK-lead-${(turn + 1) / 2} work` },
+          }
+        : { kind: "tool", name: "sessions_yield", args: {} };
+    };
+  const leadStarts = () =>
+    gateway.calls.filter(
+      (call) =>
+        call.method === "agent" &&
+        typeof call.params?.sessionKey === "string" &&
+        call.params.sessionKey.includes(":subagent:"),
+    ).length;
+  const settle = (ms = 1_500) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("control: without a stop the lead's completion wakes the hook and it spawns lead 2", async () => {
+    model.script = loopScript(() => ({ kind: "text", text: "lead done" }));
+    await startHook("run-loop-control", "MARK-loop go");
+    await waitFor("lead 2 to start", () => leadStarts() >= 2, 90_000);
+    expect(hookTurns()).toBeGreaterThanOrEqual(3);
+  }, 150_000);
+
+  /**
+   * The hook's turn has called `sessions_spawn`, which patched the lead's session and is about
+   * to start it, when the stop arrives. (A lead that was already running is killed by the stop
+   * and its completion is not announced; this one is not in the registry yet, so it runs on.)
+   */
+  async function stopWithSpawnInFlight(id: string, leadAction: (call: ModelCall) => ModelAction) {
+    let releaseSpawn!: () => void;
+    gateway.holdChildAgent = new Promise<void>((resolve) => {
+      releaseSpawn = resolve;
+    });
+    model.script = loopScript(leadAction);
+    await startHook(id, "MARK-loop go");
+    await waitFor("the spawn to reach the gateway", () => leadStarts() >= 1);
+    expect(gateway.calls.some((call) => call.method === "sessions.patch")).toBe(true);
+    expect((await rpc("sessions.stop", { key: storeKey(id) })).ok).toBe(true);
+    releaseSpawn();
+  }
+
+  it("starts no turn for the hook when its lead finishes after the stop", async () => {
+    const id = "run-loop-stop";
+    await stopWithSpawnInFlight(id, () => ({ kind: "text", text: "lead done" }));
+    // Without the fix the lead runs, its completion wakes the hook, and the hook spawns lead 2.
+    await waitFor("lead 2 or the end of the wait", () => leadStarts() >= 2, 15_000).catch(() => {});
+
+    expect(leadStarts()).toBe(1);
+    expect(hookTurns()).toBe(1);
+  }, 150_000);
+
+  it("starts no subagent turn for a spawn that was in flight at the stop", async () => {
+    await stopWithSpawnInFlight("run-loop-inflight", (call) =>
+      call.marker === "MARK-lead-1" ? execTool("sleep 7021") : { kind: "hold" },
+    );
+    await settle();
+
+    expect(callsFor("MARK-lead-1")).toBe(0);
+    expect(pidsWith("sleep 7021")).toEqual([]);
+  }, 150_000);
+
+  it("starts no nested turn under a stopped hook key, and leaves other hooks running", async () => {
+    await leaseInstruction("i-loop-1");
+    model.script = (call) =>
+      call.marker.startsWith("MARK-loop-b")
+        ? { kind: "hold" }
+        : call.toolResults === 0
+          ? act("i-loop-1")
+          : { kind: "text", text: "done" };
+    // One hook session is stopped, whatever the case of the key; its sessions never ran.
+    expect(
+      (
+        await rpc("sessions.stop", {
+          key: storeKey("run-loop-a").replace("agent:paula", "AGENT:Paula"),
+        })
+      ).ok,
+    ).toBe(true);
+    const lead = await startSubagent({
+      agentId: HOOK_AGENT,
+      controllerKey: storeKey("run-loop-a"),
+      id: "loop-lead",
+      marker: "MARK-loop-a-lead",
+    });
+    const executor = await startSubagent({
+      agentId: "discovery-executor",
+      controllerKey: lead.childKey,
+      id: "loop-exec",
+      marker: "MARK-loop-a-exec",
+    });
+    const upperCase = await startSubagent({
+      agentId: HOOK_AGENT,
+      controllerKey: storeKey("run-loop-a").replace("agent:paula", "AGENT:Paula"),
+      id: "loop-upper",
+      marker: "MARK-loop-a-upper",
+    });
+    expect((await lead.done).meta.aborted).toBe(true);
+    expect((await executor.done).meta.aborted).toBe(true);
+    expect((await upperCase.done).meta.aborted).toBe(true);
+    expect(model.calls.filter((call) => call.marker.startsWith("MARK-loop-a"))).toEqual([]);
+    expect(pidsWith("--instruction=i-loop-1")).toEqual([]);
+
+    // A second hook session, with its own lead, is not affected.
+    await startHook("run-loop-b", "MARK-loop-b go");
+    await waitFor("hook b's request", () => callsFor("MARK-loop-b") >= 1);
+    const leadB = await startSubagent({
+      agentId: HOOK_AGENT,
+      controllerKey: storeKey("run-loop-b"),
+      id: "loop-lead-b",
+      marker: "MARK-loop-b-lead",
+    });
+    await waitFor(
+      "the other hook's lead to reach the model",
+      () => callsFor("MARK-loop-b-lead") >= 1,
+    );
+    await rpc("sessions.stop", { key: storeKey("run-loop-b") });
+    expect((await leadB.done).meta.aborted).toBe(true);
+  }, 150_000);
+
+  it("tells the main session once when the stop comes during the dispatched turn", async () => {
+    const id = "run-loop-dispatched";
+    model.script = () => ({ kind: "hold" });
+    await startHook(id, "MARK-loop go");
+    await waitFor("the hook's request", () => hookTurns() >= 1);
+
+    expect((await rpc("sessions.stop", { key: storeKey(id) })).ok).toBe(true);
+    expect(await waitForMainEvents(1)).toEqual([`Hook RampUp (error): ${STOPPED}`]);
+    await settle(1_000);
+    expect(mainEvents()).toEqual([]);
+  }, 150_000);
+
+  it("tells the main session once when the stop comes during a turn the lead's completion started", async () => {
+    const id = "run-loop-woken";
+    // Lead 1 finishes; the woken hook turn (its third request) holds until the stop.
+    model.script = (call) =>
+      call.marker === "MARK-loop" && hookTurns() >= 3
+        ? { kind: "hold" }
+        : loopScript(() => ({ kind: "text", text: "lead done" }))(call);
+    await startHook(id, "MARK-loop go");
+    await waitFor("the woken turn's request", () => hookTurns() >= 3, 90_000);
+    // The dispatched turn ended at the yield and told the main session; that is not the message under test.
+    await waitForMainEvents(1);
+
+    expect((await rpc("sessions.stop", { key: storeKey(id) })).ok).toBe(true);
+    expect(await waitForMainEvents(1)).toEqual([`Hook RampUp (error): ${STOPPED}`]);
+    await settle(1_000);
+    expect(mainEvents()).toEqual([]);
+    expect(hookTurns()).toBe(3);
+  }, 150_000);
 });

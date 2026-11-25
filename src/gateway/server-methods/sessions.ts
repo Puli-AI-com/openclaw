@@ -1,12 +1,21 @@
 import fs from "node:fs";
 import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
+import {
+  HOOK_STOP_REASON,
+  hasRunningHook,
+  lastHookName,
+  markStopped,
+} from "../../agents/session-stops.js";
 import { loadConfig } from "../../config/config.js";
 import {
   loadSessionStore,
   resolveMainSessionKey,
+  resolveMainSessionKeyFromConfig,
   type SessionEntry,
   updateSessionStore,
 } from "../../config/sessions.js";
+import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
+import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
 import { GATEWAY_CLIENT_IDS } from "../protocol/client-info.js";
 import {
@@ -21,7 +30,6 @@ import {
   validateSessionsResolveParams,
   validateSessionsStopParams,
 } from "../protocol/index.js";
-import { markStopped } from "../server/hook-stops.js";
 import {
   archiveSessionTranscriptsForSession,
   cleanupSessionBeforeMutation,
@@ -288,8 +296,18 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       return;
     }
     const { cfg, target } = resolveGatewaySessionTargetFromKey(key);
+    // A dispatched hook turn tells the main session itself when the mark aborts it. A hook
+    // between turns (yielded on its subagents) has no dispatch left, so the stop tells it once.
+    const hookTurnRunning = hasRunningHook(target.canonicalKey);
     // The mark goes first so a hook that is not running yet still ends without a prompt.
     markStopped(target.canonicalKey);
+    if (!hookTurnRunning && parseAgentSessionKey(target.canonicalKey)?.rest.startsWith("hook:")) {
+      enqueueSystemEvent(
+        `Hook ${lastHookName(target.canonicalKey) ?? "RampUp"} (error): ${HOOK_STOP_REASON}`,
+        { sessionKey: resolveMainSessionKeyFromConfig() },
+      );
+      requestHeartbeatNow({ reason: "hook:stop" });
+    }
     const { entry } = loadSessionEntry(key);
     const cleanupError = await ensureSessionRuntimeCleanup({
       cfg,

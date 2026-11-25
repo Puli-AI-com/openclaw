@@ -121,6 +121,20 @@ function resolveEntryForSessionKey(params: {
   return undefined;
 }
 
+/** The session key that spawned `sessionKey`, from its session store entry. */
+export function getSpawnedByFromSessionStore(
+  sessionKey: string,
+  opts?: { cfg?: OpenClawConfig; store?: Record<string, SessionDepthEntry> },
+): string | undefined {
+  const entry = resolveEntryForSessionKey({
+    sessionKey,
+    cfg: opts?.cfg,
+    store: opts?.store,
+    cache: new Map(),
+  });
+  return normalizeSessionKey(entry?.spawnedBy);
+}
+
 export function getSubagentDepthFromSessionStore(
   sessionKey: string | undefined | null,
   opts?: {
